@@ -6,7 +6,7 @@
 #include "driver/i2c.h"
 // https://esp32tutorials.com/
 
-void DS1803_init( void );
-void DS1803_set( uint8_t chn, uint8_t val );
+void init_DS1803( void );
+void DS1803_set( uint8_t chn, uint8_t idx );
 
 #endif

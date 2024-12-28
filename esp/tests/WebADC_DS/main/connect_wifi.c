@@ -1,8 +1,14 @@
 #include "connect_wifi.h"
 
-#define EXAMPLE_ESP_WIFI_SSID CONFIG_ESP_WIFI_SSID
-#define EXAMPLE_ESP_WIFI_PASS CONFIG_ESP_WIFI_PASSWORD
-#define EXAMPLE_ESP_MAXIMUM_RETRY CONFIG_ESP_MAXIMUM_RETRY
+
+#define EXAMPLE_ESP_WIFI_SSID     "TP-Link_87EB"  // CONFIG_ESP_WIFI_SSID
+#define EXAMPLE_ESP_WIFI_PASS     "30042919"      // CONFIG_ESP_WIFI_PASSWORD
+#define EXAMPLE_ESP_MAXIMUM_RETRY 5               // CONFIG_ESP_MAXIMUM_RETRY
+
+#define EXAMPLE_STATIC_IP_ADDR        "192.168.0.121"
+#define EXAMPLE_STATIC_NETMASK_ADDR   "255.255.255.0"  // CONFIG_EXAMPLE_STATIC_NETMASK_ADDR
+#define EXAMPLE_STATIC_GW_ADDR        "192.168.0.1"    // CONFIG_EXAMPLE_STATIC_GW_ADDR
+
 
 /* FreeRTOS event group to signal when we are connected*/
 static EventGroupHandle_t s_wifi_event_group;
@@ -19,6 +25,36 @@ int wifi_connect_status = 0;
 
 static const char *TAG = "wifi_connect"; // TAG for debug
 
+static esp_err_t example_set_dns_server(esp_netif_t *netif, uint32_t addr, esp_netif_dns_type_t type)
+{
+    if (addr && (addr != IPADDR_NONE)) {
+        esp_netif_dns_info_t dns;
+        dns.ip.u_addr.ip4.addr = addr;
+        dns.ip.type = IPADDR_TYPE_V4;
+        ESP_ERROR_CHECK(esp_netif_set_dns_info(netif, type, &dns));
+    }
+    return ESP_OK;
+}
+static void example_set_static_ip(esp_netif_t *netif)
+{
+    if (esp_netif_dhcpc_stop(netif) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to stop dhcp client");
+        return;
+    }
+    esp_netif_ip_info_t ip;
+    memset(&ip, 0 , sizeof(esp_netif_ip_info_t));
+    ip.ip.addr = ipaddr_addr(EXAMPLE_STATIC_IP_ADDR);
+    ip.netmask.addr = ipaddr_addr(EXAMPLE_STATIC_NETMASK_ADDR);
+    ip.gw.addr = ipaddr_addr(EXAMPLE_STATIC_GW_ADDR);
+    if (esp_netif_set_ip_info(netif, &ip) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to set ip info");
+        return;
+    }
+    ESP_LOGD(TAG, "Success to set static ip: %s, netmask: %s, gw: %s", EXAMPLE_STATIC_IP_ADDR, EXAMPLE_STATIC_NETMASK_ADDR, EXAMPLE_STATIC_GW_ADDR);
+//    ESP_ERROR_CHECK(example_set_dns_server(netif, ipaddr_addr(EXAMPLE_MAIN_DNS_SERVER), ESP_NETIF_DNS_MAIN));
+//    ESP_ERROR_CHECK(example_set_dns_server(netif, ipaddr_addr(EXAMPLE_BACKUP_DNS_SERVER), ESP_NETIF_DNS_BACKUP));
+}
+
 static void event_handler(void *arg, esp_event_base_t event_base,
                           int32_t event_id, void *event_data)
 {
@@ -26,6 +62,10 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     {
         esp_wifi_connect();
     }
+	else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_CONNECTED) 
+	{
+        example_set_static_ip(arg);
+	}
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
     {
         if (s_retry_num < EXAMPLE_ESP_MAXIMUM_RETRY)
@@ -51,14 +91,24 @@ static void event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
+//esp_err_t 
+void set_wifi_tx_power() {
+    int8_t max_tx_power = 30; // 80 -> 20 dBm  ; 1 -> 0.25 dBm
+    esp_wifi_set_max_tx_power(max_tx_power);
+}
+
 void connect_wifi(void)
 {
+	set_wifi_tx_power();
     s_wifi_event_group = xEventGroupCreate();
 
     ESP_ERROR_CHECK(esp_netif_init());
 
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
+//    esp_netif_create_default_wifi_sta(); --
+    esp_netif_t *sta_netif = esp_netif_create_default_wifi_sta(); // +
+    assert(sta_netif);                                            // +
+
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
@@ -68,12 +118,12 @@ void connect_wifi(void)
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
                                                         &event_handler,
-                                                        NULL,
+                                                        sta_netif, // NULL, !
                                                         &instance_any_id));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
                                                         IP_EVENT_STA_GOT_IP,
                                                         &event_handler,
-                                                        NULL,
+                                                        sta_netif, // !NULL,
                                                         &instance_got_ip));
 
     wifi_config_t wifi_config = {

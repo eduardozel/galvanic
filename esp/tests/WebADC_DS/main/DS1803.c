@@ -4,8 +4,8 @@
 
 static const char *TAG = "DS1803";
 
-#define I2C_MASTER_SCL_IO 2               /*!< gpio number for I2C master clock */
-#define I2C_MASTER_SDA_IO 3               /*!< gpio number for I2C master data  */
+#define I2C_MASTER_SCL_IO  9               /*!< gpio number for I2C master clock */
+#define I2C_MASTER_SDA_IO 10               /*!< gpio number for I2C master data  */
 #define I2C_MASTER_FREQ_HZ 100000        /*!< I2C master clock frequency */
 #define I2C_MASTER_TX_BUF_DISABLE 0                           /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_RX_BUF_DISABLE 0                           /*!< I2C master doesn't need buffer */
@@ -17,13 +17,7 @@ static const char *TAG = "DS1803";
 #define ACK_VAL 0x0                             /*!< I2C ack value */
 #define NACK_VAL 0x1                            /*!< I2C nack value */
 
-
 #define DS1803_ADDR                   0x28
-// #define uint8_t CMD_POT0               0xA9
-// #define CMD_POT1                      0xAA
-// #define CMD_POT01                     0xAF
-
-
 
 int i2c_master_port = 0;
 static esp_err_t i2c_master_init(void)
@@ -61,21 +55,25 @@ static esp_err_t i2c_master_send(uint8_t message[], int len)
     return ret;
 }
 
-void DS1803_init( void ) 
+void init_DS1803( void ) 
 {
     ESP_ERROR_CHECK(i2c_master_init());
-    ESP_LOGI(TAG, "I2C initialized successfully");
+    ESP_LOGI(TAG, "I2C DS1803 initialized successfully");
+	DS1803_set( 0, 0);
+	DS1803_set( 1, 0);
 }
 
-void DS1803_set( uint8_t chn, uint8_t val ) 
+void DS1803_set( uint8_t chn, uint8_t idx ) 
 {
   const uint8_t  CMD_POT0 = 0xA9;
   const uint8_t  CMD_POT1 = 0xAA;
-  const uint8_t  values[10] = { 0x00, 0x05, 0x10, 0x20, 0x80, 0x90, 0xA0, 0xB0, 0xC0, 0xFF};
+  const uint8_t  CMD_POTb = 0xAF;
+  const uint8_t  values[10] = { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0xB0, 0xC0, 0xFF};
   uint8_t  msg[2];
-  msg[1] = values[val];
-  if ( 1 == chn) { msg[0] = CMD_POT0;
-  } else         { msg[0] = CMD_POT1;
+  msg[1] = values[idx];
+  if        ( 1 == chn) { msg[0] = CMD_POTb; ESP_LOGI(TAG, "Sending Message >CMD_POT1");
+  } else if ( 0 == chn) { msg[0] = CMD_POT0; ESP_LOGI(TAG, "Sending Message >CMD_POT0");
+  } else {                                   ESP_LOGI(TAG, "Sending Message >CMD_???");
   }
   i2c_master_send( msg, 2);
 } // DS1803_set
