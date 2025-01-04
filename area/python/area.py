@@ -94,56 +94,13 @@ def calculate_area(image_path):
 
 #    cv2.drawContours(hsv_image, contours, -1, (255, 0, 0), 3, cv2.LINE_AA, hierarchy, 1)
 #    cv2.imshow('contours', hsv_image)
-    '''
-    square_image = # get_image_with_contour(image, largest_contour)
-    img1 = cv2.resize(square_image, (300, 300)) #  mask_red
-    pil_image = Image.fromarray(img1)
-    pil_image.save('square_image.jpg')
 
-    # Создаем виджет для отображения изображения
-    img = ImageTk.PhotoImage(image=pil_image)
-    panel = tk.Label(root, image=img)
-    panel.place(x=330, y=50)
-
-    # Создаем маску для не красных фигур
-
-    maskR1 = cv2.inRange(square_image, lower_red1, upper_red1)
-    maskR2 = cv2.inRange(square_image, lower_red2, upper_red2)
-    mask_red2 = cv2.bitwise_or(maskR1, maskR2)
-
-    mask_non_red = cv2.bitwise_not(mask_red2)
-    imgNR = cv2.resize(mask_red2, (300, 300))
-    pil_imageNR = Image.fromarray(imgNR)
-    imgnr = ImageTk.PhotoImage(image=pil_imageNR)
-    panelnr = tk.Label(root, image=imgnr)
-    panelnr.place(x=660, y=50)
-    '''
-
-    imgNR = cv2.resize(mask_non_red, (300, 300))
-    pil_imageNR = Image.fromarray(imgNR)
-    imgnr = ImageTk.PhotoImage(image=pil_imageNR)
-    panelnr = tk.Label(root, image=imgnr)
-    panelnr.place(x=660, y=50)
     non_red_contours, hierarchy = cv2.findContours(mask_non_red, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     total_non_red_area = 0.0
     for contour in non_red_contours:
         area_pixels = cv2.contourArea(contour)
         total_non_red_area += area_pixels
-
-    '''
-    # Нахождение контуров не красных фигур внутри красного квадрата
-    non_red_contours, hierarchy = cv2.findContours(mask_within_red_square, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    cv2.drawContours(hsv_image, non_red_contours, -1, (255, 0, 0), 3, cv2.LINE_AA, hierarchy, 1)
-    cv2.imshow('non red contours', mask_non_red)
-
-    total_non_red_area = 0.0
-    for contour in non_red_contours:
-        area_pixels = cv2.contourArea(contour)
-        total_non_red_area += area_pixels
-
-    '''
 
     # Изменяем размеры изображений для отображения
     original_image_resized = cv2.resize(original_image, (300, 300))
@@ -160,6 +117,19 @@ def calculate_area(image_path):
     # Преобразуем площадь в квадратные сантиметры
     pixel_per_cm = ( maxY- minY ) / 15 #10.0
     total_non_red_area_cm2 = total_non_red_area_cm2 / (pixel_per_cm ** 2)
+
+    font = cv2.FONT_HERSHEY_COMPLEX
+    crMin =  ( total_non_red_area_cm2 * 10. ) / 1000
+    crMax =  ( total_non_red_area_cm2 * 20. ) / 1000
+
+    imgNR = cv2.resize(mask_non_red, (300, 300))
+    cv2.putText(imgNR, f"площадь: {total_non_red_area_cm2:.0f} см²", ( 20, 20),  font, 0.5, (255, 0, 0))
+    cv2.putText(imgNR, f"ток: { crMin:.1f} - { crMax:.1f} A", ( 20, 40),  font, 0.5, (255, 0, 0))
+    pil_imageNR = Image.fromarray(imgNR)
+    imgnr = ImageTk.PhotoImage(image=pil_imageNR)
+    panelnr = tk.Label(root, image=imgnr)
+    panelnr.place(x=660, y=50)
+
 
     messagebox.showinfo(f"Суммарная площадь фигур: {total_non_red_area_cm2:.2f} см²")
 #    return area_cm2, original_image_resized, warped_image_resized, non_red_highlighted_resized, total_non_red_area_cm2
@@ -186,32 +156,6 @@ def calculate_and_display_area():
 
 #    area, original_image, warped_image, non_red_highlighted, total_non_red_area =
     calculate_area(label_original.file_path)
-'''
-    if area > 0 and warped_image is not None:
-        # Преобразуем изображения для отображения
-        original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
-        warped_image = cv2.cvtColor(warped_image, cv2.COLOR_BGR2RGB)
-        non_red_highlighted = cv2.cvtColor(non_red_highlighted, cv2.COLOR_BGR2RGB)
-
-        # Создаем изображения для Tkinter
-        original_img = Image.fromarray(original_image)
-        warped_img = Image.fromarray(warped_image)
-        non_red_img = Image.fromarray(non_red_highlighted)
-
-        # Обновляем изображения в соответствующих Label
-        label_original.config(image=ImageTk.PhotoImage(original_img))
-        label_original.image = ImageTk.PhotoImage(original_img)
-
-        label_warped.config(image=ImageTk.PhotoImage(warped_img))
-        label_warped.image = ImageTk.PhotoImage(warped_img)
-
-        label_non_red.config(image=ImageTk.PhotoImage(non_red_img))
-        label_non_red.image = ImageTk.PhotoImage(non_red_img)
-
-        messagebox.showinfo("Результат", f"Площадь красной фигуры: {area:.2f} см²\nСуммарная площадь не красных фигур: {total_non_red_area:.2f} см²")
-    else:
-        messagebox.showinfo("Результат", "Не удалось найти красную фигуру.")
-'''
 #app = tk.Tk()
 
 root = tk.Tk()
