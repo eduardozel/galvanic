@@ -14,7 +14,6 @@ bot = telebot.TeleBot(TOKEN)
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    # Создаем клавиатуру
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     area_button = types.KeyboardButton("Area")
     keyboard.add(area_button)
@@ -37,34 +36,37 @@ def handle_text(message):
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
-    # Получаем файл изображения
     file_info = bot.get_file(message.photo[-1].file_id)
     downloaded_file = bot.download_file(file_info.file_path)
 
-    with open('received_image.jpg', 'wb') as new_file:
+    current_date = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    fname_inp = 'areas/inp_bak/received_image_' + current_date + '.jpg'
+
+#    with open('received_image.jpg', 'wb') as new_file:
+#        new_file.write(downloaded_file)
+
+    with open(fname_inp, 'wb') as new_file:
         new_file.write(downloaded_file)
 
-    output_file_path = countArea('received_image.jpg')
+    output_file_path = countArea(fname_inp)
 
     with open(output_file_path, 'rb') as f:
         bot.send_photo(message.chat.id, f)
+    bot.reply_to(message, "При двустороннем меднении умножьте ток на два.")
+# \n При сложной форме листа рекомендуется уменьшить ток примерно два раза.
 
     # Удаляем временные файлы
-    os.remove('received_image.jpg')
-    os.remove(output_file_path)
+    os.remove(fname_inp)
+#    os.remove(output_file_path)
 
 def add_date_to_image(file_path: str) -> str:
-    # Загружаем изображение
     image = cv2.imread(file_path)
 
-    # Получаем текущую дату
     current_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Добавляем текст на изображение
     font = cv2.FONT_HERSHEY_SIMPLEX
     cv2.putText(image, current_date, (10, 30), font, 1, (255, 255, 255), 2, cv2.LINE_AA)
 
-    # Сохраняем измененное изображение
     output_file_path = 'output_with_date.jpg'
     cv2.imwrite(output_file_path, image)
 
@@ -103,8 +105,8 @@ def countArea(image_path: str) -> str:
         if ( y < minY ) :
             minY = y
     square_image = image[ minY:maxY, minX:maxX]
-    pil_sqrimage = Image.fromarray( cv2.cvtColor(square_image, cv2.COLOR_BGR2RGB))
-    pil_sqrimage.save('square_image.jpg')
+#    pil_sqrimage = Image.fromarray( cv2.cvtColor(square_image, cv2.COLOR_BGR2RGB))
+#    pil_sqrimage.save('square_image.jpg')
 
     hsv_sqrimage = cv2.cvtColor(square_image, cv2.COLOR_BGR2HSV)
     mask1 = cv2.inRange(hsv_sqrimage, lower_red1, upper_red1)
@@ -130,13 +132,17 @@ def countArea(image_path: str) -> str:
 
     color = (255, 0, 0) # RGB
     thickness = 2
-    cv2.putText(imgNR, f"area : {total_non_red_area_cm2:.0f} cm^2", ( 30, 50),  font, 1., color, thickness)
-    cv2.putText(imgNR, f"current: { crMin:.1f} - { crMax:.1f} A", ( 40, 80),  font, 1., color, thickness)
+    cv2.putText(imgNR, f"{total_non_red_area_cm2:.0f} cm^2", ( 30, 50),  font, 1., color, thickness)
+    cv2.putText(imgNR, f"{ crMin:.1f} - { crMax:.1f} A", ( 40, 80),  font, 1., color, thickness)
+
+
+    current_date = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+    fname = 'areas/out_bak/area_image_' + current_date + '.jpg'
+
     pil_imageNR = Image.fromarray(imgNR)
-    pil_imageNR.save('area_image.jpg')
-    # Удаляем временные файлы
-    os.remove('received_image.jpg')
-    return 'area_image.jpg'
+    pil_imageNR.save(fname)
+
+    return fname
 
 # = = =  = = = = = = = = = = = = = = = = = = = = = =
 if __name__ == '__main__':
