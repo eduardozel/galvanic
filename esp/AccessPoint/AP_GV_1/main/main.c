@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -49,8 +50,11 @@
 // https://docs.espressif.com/projects/esp-idf/en/v5.3.1/esp32/api-reference/peripherals/adc_oneshot.html
 // https://espressif-docs.readthedocs-hosted.com/projects/arduino-esp32/en/latest/api/adc.html
 
-#define ADC_CHANNEL_1 ADC1_CHANNEL_0 // GPIO 0
-#define ADC_CHANNEL_2 ADC1_CHANNEL_1 // GPIO 1
+#define ADC_v1 ADC1_CHANNEL_0 // GPIO 0
+#define ADC_v2 ADC1_CHANNEL_1 // GPIO 1
+#define ADC_c1 ADC1_CHANNEL_2 // GPIO 2
+#define ADC_c2 ADC1_CHANNEL_3 // GPIO 3
+
 
 
 #define EXAMPLE_ESP_WIFI_SSID      "galvanica" // CONFIG_ESP_WIFI_SSID
@@ -68,27 +72,34 @@ struct async_resp_arg {
 
 static const char *TAG = "AP galvanica";
 
-int led_state = 0;
+static int led_state = 0;
 
-int total_seconds[2];
+static int total_seconds[2];
+static const int tick = 10;
 
 #define INDEX_HTML_PATH "/spiffs/start.html"
 #define STYLE_CSS_PATH  "/spiffs/styles.css"
 
-char index_html[8192+4096];
+static char index_html[8192+4096];
 //char style_css[4096];
 
-char response_data[8192+4096];
+static char response_data[8192+4096];
 
 void STOP( uint8_t ch ){
 	total_seconds[ch]= 0;
-	DS1803_set( ch, 0);
+    if ( 0 == ch ) {
+      DS1803_set( 1, 0);
+	} else {
+      DS1803_set( 0, 0);
+	}
 }
 
 static void init_adc() {
     adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC_CHANNEL_1, ADC_ATTEN_DB_11); // ADC_ATTEN_DB_11 0 mV ~ 2500 mV;  ADC_ATTEN_DB_6 0 mV ~ 1300 mV -- ADC_ATTEN_DB_12
-    adc1_config_channel_atten(ADC_CHANNEL_2, ADC_ATTEN_DB_11);
+    adc1_config_channel_atten(ADC_v1, ADC_ATTEN_DB_11); // ADC_ATTEN_DB_11 0 mV ~ 2500 mV;  ADC_ATTEN_DB_6 0 mV ~ 1300 mV -- ADC_ATTEN_DB_12
+    adc1_config_channel_atten(ADC_v2, ADC_ATTEN_DB_11);
+    adc1_config_channel_atten(ADC_c1, ADC_ATTEN_DB_0);  // ADC_ATTEN_DB_0 0 mV ~ 750 mV
+    adc1_config_channel_atten(ADC_c2, ADC_ATTEN_DB_0);
 }
 
 static void init_led(void)
@@ -105,26 +116,26 @@ void task_blink_led(void *arg) {
         gpio_set_level(LED_PIN, 0);
         vTaskDelay( 1000 / portTICK_PERIOD_MS);
     }
-}
+} // task_blink_led
 
 void task_counter(void *arg) {
     while (1) {
-		if        ( total_seconds[0]   > 10 ) { total_seconds[0] -= 10;
-		} else if ( total_seconds[0]  == 10 ) { STOP(0);
+		if        ( total_seconds[0]   > tick ) { total_seconds[0] -= tick;
+		} else if ( total_seconds[0]  == tick ) { STOP(0);
 		}
-		if        ( total_seconds[1]   > 10 ) { total_seconds[1] -= 10;
-		} else if ( total_seconds[1]  == 10 ) { STOP(1);
+		if        ( total_seconds[1]   > tick ) { total_seconds[1] -= tick;
+		} else if ( total_seconds[1]  == tick ) { STOP(1);
 		}
 		vTaskDelay( 10000 / portTICK_PERIOD_MS);
     }
-}
+} // task_counter
 
 static void init_sound(void)
 {
     ESP_LOGI(TAG, "configured buzzer GPIO!");
 	gpio_reset_pin(BUZZER_PIN);
 	gpio_set_direction( BUZZER_PIN, GPIO_MODE_OUTPUT);
-}
+} // init_sound
 
 void sound_beep(unsigned char dur_hms)
 {
@@ -156,16 +167,18 @@ void sound_beep(unsigned char dur_hms)
 
 }
 
-
-static void initi_web_page_buffer(void)
-{
-    esp_vfs_spiffs_conf_t conf = {
+void init_spiffs() {
+    esp_vfs_spiffs_conf_t spiffs_conf = {
         .base_path = "/spiffs",
         .partition_label = NULL,
         .max_files = 5,
         .format_if_mount_failed = true};
 
-    ESP_ERROR_CHECK(esp_vfs_spiffs_register(&conf));
+    ESP_ERROR_CHECK(esp_vfs_spiffs_register(&spiffs_conf));
+};
+
+static void initi_web_page_buffer(void)
+{
 
     memset((void *)index_html, 0, sizeof(index_html));
 //	memset((void *)style_css,  0, sizeof(style_css));
@@ -250,15 +263,24 @@ static void ws_async_send(void *arg)
     httpd_handle_t hd = resp_arg->hd;
     int fd = resp_arg->fd;
 
-	uint32_t voltage1 = adc1_get_raw(ADC_CHANNEL_1);  // int analogVolts = analogReadMilliVolts(2);
-	uint32_t voltage2 = adc1_get_raw(ADC_CHANNEL_2);
+	uint32_t voltage1 = adc1_get_raw(ADC_v1);  // int analogVolts = analogReadMilliVolts(2);
+	uint32_t voltage2 = adc1_get_raw(ADC_v2);
+
+	uint32_t current1 = adc1_get_raw(ADC_c1);
+	uint32_t current2 = adc1_get_raw(ADC_c2);
+
 	
 	// (0-4095 -> 0-2.5 V)
 	float v1 = (voltage1 / 4095.0) * 2.5; 
 	float v2 = (voltage2 / 4095.0) * 2.5;
 
+	// (0-4095 -> 0-2.5 V)
+	float c1 = (current1 / 1.0); 
+	float c2 = (current2 / 1.0);
+
+
     char buffer[128];// = getVoltJS();
-    snprintf(buffer, sizeof(buffer), "{\"channel1\": %.1f, \"channel2\": %.1f, \"timer1\": \"%d\", \"timer2\": \"%d\" }", v1, v2, total_seconds[0], total_seconds[1] );
+    snprintf(buffer, sizeof(buffer), "{\"v1\": %.1f, \"v2\": %.1f, \"c1\": %.1f, \"c2\": %.1f, \"timer1\": \"%d\", \"timer2\": \"%d\" }", v1, v2, c1, c2, total_seconds[0], total_seconds[1] );
     ESP_LOGI(TAG, "msg: %s", buffer);
     
     
@@ -360,7 +382,11 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 					const char *dsVAL = cJSON_GetObjectItem(json, "val")->valuestring;//->valueint;
 					const char *DUR   = cJSON_GetObjectItem(json, "duration")->valuestring;//->valueint;
 					int dsIDX = atoi(dsVAL);
-					DS1803_set( chanS, dsIDX);
+                    if ( 0 == chanS ) {
+						DS1803_set( 1, dsIDX);
+					} else {
+						DS1803_set( 0, dsIDX);
+					}
 					int duration = atoi(DUR)*60;
 					total_seconds[chanS] = duration;
 					ESP_LOGI(TAG, "start val: %s <idx> %d <duration> %d", dsVAL, dsIDX, duration); //duration
@@ -488,6 +514,7 @@ void app_main()
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+    init_spiffs();
 
     total_seconds[0] = 0;
 	total_seconds[1] = 0;
@@ -506,6 +533,8 @@ void app_main()
 
 	led_state = 0;
 	
+    ESP_LOGI(TAG, "ready to wifi");
+    vTaskDelay( 2000 );
     ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
     wifi_init_softap();
 
