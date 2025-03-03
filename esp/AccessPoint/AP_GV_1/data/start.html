@@ -1,4 +1,5 @@
 <!DOCTYPE HTML>
+<!DOCTYPE HTML>
 <html>
 
 <head>
@@ -103,6 +104,26 @@
             -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
         }
 
+        .current {
+            padding: 10px 10px;
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            outline: none;
+            color: #00156d;
+            background-color: #F8F7F9;
+            border: #0ffa6d;
+            border-radius: 5px;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+        }
+
+
         .timer {
             padding: 10px 10px;
             font-size: 24px;
@@ -145,7 +166,7 @@
 
 <body>
     <div class="topnav">
-        <h1>Galvanyzer Server v 1.0</h1>
+        <h1>Galvanyzer Server v 1.1</h1>
     </div>
     <script>
         var gateway = `ws://${window.location.hostname}/ws`;
@@ -168,8 +189,12 @@
         function onMessage(event) {
             console.log(event.data);
 			var data = JSON.parse(event.data);
-            document.getElementById('channel1').innerText = data.channel1;
-            document.getElementById('channel2').innerText = data.channel2;
+            document.getElementById('v1').innerText = data.v1;
+            document.getElementById('v2').innerText = data.v2;
+
+            document.getElementById('c1').innerText = data.c1;
+            document.getElementById('c2').innerText = data.c2;
+
 			const cnt1 = data.timer1;
 			if ( cnt1 > 0 ) {
 				const min1 = Math.floor( cnt1 / 60);
@@ -230,7 +255,9 @@
 <h1>Voltage Monitor</h1>
 <table border='1' align="center">
 <tr><th>channel #1</th><th>channel #2</th></tr>
-<tr><td id='channel1'  class = 'voltage'>- - -</td><td id='channel2' class = 'voltage'>- - -</td>
+<tr><td id='v1'  class = 'voltage'>- - -</td><td id='v2' class = 'voltage'>- - -</td>
+</tr>
+<tr><td id='c1'  class = 'current'>- - -</td><td id='c2' class = 'current'>- - -</td>
 </tr>
 <tr><td id='counter1'  class = 'timer'>- - -</td><td id='counter2' class = 'timer'>- - -</td>
 </tr>
@@ -238,10 +265,17 @@
 <td>
     <select id="hr1" class = "clock">
         <option value="0"></option>
-        <option value="60">01 : </option>
+        <option value= "60">01 : </option>
         <option value="120">02 : </option>
         <option value="180">03 : </option>
         <option value="240">04 : </option>
+        <option value="300">05 : </option>
+        <option value="360">06 : </option>
+        <option value="420">07 : </option>
+        <option value="480">08 : </option>
+        <option value="540">09 : </option>
+        <option value="600">10 : </option>
+        <option value="660">11 : </option>
 	</select>
     <select id="mn1" class = "clock">
         <option value="0">00</option>
@@ -257,6 +291,13 @@
         <option value="120">02 : </option>
         <option value="180">03 : </option>
         <option value="240">04 : </option>
+        <option value="300">05 : </option>
+        <option value="360">06 : </option>
+        <option value="420">07 : </option>
+        <option value="480">08 : </option>
+        <option value="540">09 : </option>
+        <option value="600">10 : </option>
+        <option value="660">11 : </option>
 	</select>
     <select id="mn2" class = "clock">
         <option value="0">00</option>
@@ -269,24 +310,32 @@
 <tr>
 <td>
     <select id="val1" class = "combo">
-        <option value="0">off</option>
-        <option value="1">0.2</option>
-        <option value="2">0.5</option>
-        <option value="3">0.8</option>
-        <option value="4">1.1</option>
-        <option value="5">1.4</option>
-        <option value="6">1.7</option>
+        <option value= "0">off</option>
+        <option value= "1">0.1</option>
+        <option value= "2">0.2</option>
+        <option value= "3">0.4</option>
+        <option value= "4">0.6</option>
+        <option value= "5">0.8</option>
+        <option value= "6">1.0</option>
+        <option value= "7">1.2</option>
+        <option value= "8">1.4</option>
+        <option value= "9">1.6</option>
+        <option value="10">1.8</option>
 	</select>
 </td>
 <td>
     <select id="val2" class = "combo">
         <option value="0">off</option>
-        <option value="1">0.2</option>
-        <option value="2">0.5</option>
-        <option value="3">0.8</option>
-        <option value="4">1.1</option>
-        <option value="5">1.4</option>
-        <option value="6">1.7</option>
+        <option value= "1">0.1</option>
+        <option value= "2">0.2</option>
+        <option value= "3">0.4</option>
+        <option value= "4">0.6</option>
+        <option value= "5">0.8</option>
+        <option value= "6">1.0</option>
+        <option value= "7">1.2</option>
+        <option value= "8">1.4</option>
+        <option value= "9">1.6</option>
+        <option value="10">1.8</option>
     </select>
 </td>
 </tr>
