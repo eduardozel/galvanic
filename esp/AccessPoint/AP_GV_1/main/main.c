@@ -29,13 +29,28 @@
 //#include "esp_adc/adc_oneshot.h"
 //#include "driver/gpio.h"
 
-
+// https://gorchilin.com/calculator/circuitjs
 
 #include "DS1803.h"
 
-#define LED_PIN 8
+#define ADC_v1 ADC1_CHANNEL_0 // GPIO 0
+#define ADC_v2 ADC1_CHANNEL_1 // GPIO 1
+#define ADC_c1 ADC1_CHANNEL_2 // GPIO 2
+#define ADC_c2 ADC1_CHANNEL_3 // GPIO 3
+
+// gpio 4 RESET
+#define brown_detect_gpio 5
+#define test_gpio 6
 
 #define BUZZER_PIN 7
+
+#define LED_PIN 8
+#define led_on  0
+#define led_off 1
+
+//#define I2C_MASTER_SCL_IO  9               /*!< gpio number for I2C master clock */
+//#define I2C_MASTER_SDA_IO 10               /*!< gpio number for I2C master data  */
+
 
 #define LEDC_TIMER              LEDC_TIMER_0
 #define LEDC_MODE               LEDC_LOW_SPEED_MODE
@@ -49,11 +64,6 @@
 // https://microsin.net/programming/arm/esp32-adc.html?ysclid=m4pxyiamqf966518188
 // https://docs.espressif.com/projects/esp-idf/en/v5.3.1/esp32/api-reference/peripherals/adc_oneshot.html
 // https://espressif-docs.readthedocs-hosted.com/projects/arduino-esp32/en/latest/api/adc.html
-
-#define ADC_v1 ADC1_CHANNEL_0 // GPIO 0
-#define ADC_v2 ADC1_CHANNEL_1 // GPIO 1
-#define ADC_c1 ADC1_CHANNEL_2 // GPIO 2
-#define ADC_c2 ADC1_CHANNEL_3 // GPIO 3
 
 
 
@@ -81,11 +91,18 @@ static const int tick = 10;
 #define STYLE_CSS_PATH  "/spiffs/styles.css"
 
 static char index_html[8192+4096];
-//char style_css[4096];
+char style_css[2048];
 
 static char response_data[8192+4096];
 
-void STOP( uint8_t ch ){
+
+static void IRAM_ATTR bd_isr_handler(void* arg) {
+//    DS1803_set( 1, 0);
+//    DS1803_set( 0, 0);
+    gpio_set_level(LED_PIN, led_on);
+} // bd_isr_handler
+
+static void STOP( uint8_t ch ){
 	total_seconds[ch]= 0;
     if ( 0 == ch ) {
       DS1803_set( 1, 0);
@@ -102,18 +119,32 @@ static void init_adc() {
     adc1_config_channel_atten(ADC_c2, ADC_ATTEN_DB_0);
 }
 
-static void init_led(void)
+static void init_brown_detect(void)
 {
-    ESP_LOGI(TAG, "configured to blink GPIO LED!");
+    ESP_LOGI(TAG, "configured  brown detect gpio");
+    gpio_reset_pin( brown_detect_gpio);
+    gpio_set_direction( brown_detect_gpio, GPIO_MODE_INPUT);
+    gpio_set_pull_mode( brown_detect_gpio, GPIO_PULLUP_ONLY);
+//    gpio_set_pull_mode( brown_detect_gpio, GPIO_PULLDOWN_ONLY);
+
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(brown_detect_gpio, bd_isr_handler, NULL);
+    gpio_set_intr_type(brown_detect_gpio, GPIO_INTR_POSEDGE);
+	gpio_intr_enable(brown_detect_gpio);
+} // brown_detect_gpio
+
+static void init_led(){
     gpio_reset_pin(LED_PIN);
     gpio_set_direction( LED_PIN, GPIO_MODE_OUTPUT);
-}
+	led_state = 0;
+} // init_led
+
 
 void task_blink_led(void *arg) {
     while (1) {
-        gpio_set_level(LED_PIN, 1);
+        gpio_set_level(LED_PIN, led_off);
         vTaskDelay(  500 / portTICK_PERIOD_MS);
-        gpio_set_level(LED_PIN, 0);
+        gpio_set_level(LED_PIN, led_on);
         vTaskDelay( 1000 / portTICK_PERIOD_MS);
     }
 } // task_blink_led
@@ -164,8 +195,7 @@ void sound_beep(unsigned char dur_hms)
 //	vTaskDelay(pdMS_TO_TICKS(dur_hms*100));
     vTaskDelay( 1000 / portTICK_PERIOD_MS);
 	ledc_stop(LEDC_MODE,LEDC_CHANNEL,0); // LEDC_HS_MODE LEDC_HS_CH0_CHANNEL
-
-}
+} // sound_beep
 
 void init_spiffs() {
     esp_vfs_spiffs_conf_t spiffs_conf = {
@@ -175,13 +205,12 @@ void init_spiffs() {
         .format_if_mount_failed = true};
 
     ESP_ERROR_CHECK(esp_vfs_spiffs_register(&spiffs_conf));
-};
+}; // init_spiffs
 
 static void initi_web_page_buffer(void)
 {
-
     memset((void *)index_html, 0, sizeof(index_html));
-//	memset((void *)style_css,  0, sizeof(style_css));
+	memset((void *)style_css,  0, sizeof(style_css));
     struct stat st;
     if (stat(INDEX_HTML_PATH, &st))
     {
@@ -209,7 +238,7 @@ static void initi_web_page_buffer(void)
     }
     fclose(fp);
 */
-}
+} // initi_web_page_buffer
 
 esp_err_t style_handler(httpd_req_t *req) {
     FILE *file = fopen(STYLE_CSS_PATH, "r");
@@ -221,7 +250,7 @@ esp_err_t style_handler(httpd_req_t *req) {
 	fseek(file, 0, SEEK_END);
     long size = ftell(file);
     fseek(file, 0, SEEK_SET);
-    ESP_LOGI(TAG, "styles.css size: %ld", size);
+    ESP_LOGI(TAG, "------------------styles.css size: %ld", size);
     char buffer[1024];
     size_t read_bytes;
     while ((read_bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
@@ -230,7 +259,7 @@ esp_err_t style_handler(httpd_req_t *req) {
     fclose(file);
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
-}
+} // style_handler
 
 
 static esp_err_t get_req_handler(httpd_req_t *req) {
@@ -503,8 +532,6 @@ void wifi_init_softap(void)
 }
 // - - - - - - - - - - -
 
-
-
 void app_main()
 {
     esp_err_t ret = nvs_flash_init();
@@ -522,22 +549,16 @@ void app_main()
     init_adc();
 	init_DS1803();
 	init_led();
+	init_brown_detect();
 //    init_sound();
 //	sound_beep(100);
 
-	xTaskCreate(&task_blink_led, "BlinkLed",  4096, NULL, 5, NULL);
+    xTaskCreate(&task_blink_led, "BlinkLed",  4096, NULL, 5, NULL);
 	xTaskCreate(&task_counter,   "countdown", 4096, NULL, 5, NULL);
-	
-	gpio_reset_pin(LED_PIN);
-	gpio_set_direction(LED_PIN, GPIO_MODE_OUTPUT);
 
-	led_state = 0;
-	
-    ESP_LOGI(TAG, "ready to wifi");
-    vTaskDelay( 2000 );
     ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
     wifi_init_softap();
-
+	
 	ESP_LOGI(TAG, "ESP32 ESP-IDF WebSocket Web Server is running ... ...\n");
 	initi_web_page_buffer();
 	setup_websocket_server();

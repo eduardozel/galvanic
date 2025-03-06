@@ -86,13 +86,11 @@ void DS1803_set( uint8_t chn, uint8_t idx )
 void read_values() {
     uint8_t  value;
 
-    ESP_LOGI(TAG, "read_values --");
     FILE *f = fopen(VALUES_PATH, "r");
     if (f == NULL) {
-        ESP_LOGE(TAG, "Failed to open file for reading");
+        ESP_LOGE(TAG, "Failed to open file %s for reading", VALUES_PATH);
         return;
     }
-    ESP_LOGI(TAG, "read_values -- --");
     char line[128];
     uint8_t line_count = 0;
     fgets(line, sizeof(line), f);
@@ -102,21 +100,17 @@ void read_values() {
         uint8_t value_count = 0;
 
         while (token != NULL && value_count < MAX_VALUES) {
-            ESP_LOGI(TAG, "value = %s", token);
 			value = (uint8_t)atoi(token);
-            if ( 2 == line_count ) {
-              values0[value_count] = value;
-			} else if ( 3 == line_count ) {
-              values1[value_count] = value;
+            if ( 2 == line_count ) {        values0[value_count] = value;
+			} else if ( 3 == line_count ) { values1[value_count] = value;
 			}
             token = strtok(NULL, ",");
             value_count++;
-        }
-        ESP_LOGI(TAG, "read_values + + + + + + + +");
+        } // while token
         line_count++;
-    }
+    } // while line
     fclose(f);
-}
+} // read_values
 
 void init_DS1803( void ) 
 {
