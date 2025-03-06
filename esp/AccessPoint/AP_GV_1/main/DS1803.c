@@ -7,6 +7,7 @@ static const char *TAG = "DS1803";
 
 #define I2C_MASTER_SCL_IO  9               /*!< gpio number for I2C master clock */
 #define I2C_MASTER_SDA_IO 10               /*!< gpio number for I2C master data  */
+
 #define I2C_MASTER_FREQ_HZ 100000        /*!< I2C master clock frequency */
 #define I2C_MASTER_TX_BUF_DISABLE 0                           /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_RX_BUF_DISABLE 0                           /*!< I2C master doesn't need buffer */
@@ -30,9 +31,8 @@ static uint8_t  values1[MAX_VALUES] = { 0x00, 0x07, 0x0C, 0x12, 0x18, 0x23, 0x2E
 
                                      0.1   0.2   0.4   0.6   0.8   1.0   1.2   1.4   1.6   1.8 
 */
- uint8_t  values0[MAX_VALUES] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // down
- uint8_t  values1[MAX_VALUES] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // up
-
+static uint8_t  values0[MAX_VALUES] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // down
+static uint8_t  values1[MAX_VALUES] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // up
 
 static esp_err_t i2c_master_init(void)
 {
@@ -92,24 +92,29 @@ void read_values() {
         return;
     }
     char line[128];
-    uint8_t line_count = 0;
+    uint8_t ln = 0;
     fgets(line, sizeof(line), f);
 	fgets(line, sizeof(line), f);
-    while (fgets(line, sizeof(line), f) != NULL && line_count < 4) {
+    while (fgets(line, sizeof(line), f) != NULL && ln < 2) {
         char *token = strtok(line, ",");
-        uint8_t value_count = 0;
-
-        while (token != NULL && value_count < MAX_VALUES) {
+        uint8_t vn = 0;
+        while (token != NULL && vn < MAX_VALUES) {
 			value = (uint8_t)atoi(token);
-            if ( 2 == line_count ) {        values0[value_count] = value;
-			} else if ( 3 == line_count ) { values1[value_count] = value;
+            if        ( 0 == ln ) { values0[vn] = value;
+			} else if ( 1 == ln ) { values1[vn] = value;
 			}
             token = strtok(NULL, ",");
-            value_count++;
+            vn++;
         } // while token
-        line_count++;
+        ln++;
     } // while line
     fclose(f);
+/*
+	printf("\nvalues0:\n");
+	for (int i = 0; i < MAX_VALUES; i++) {
+	  printf("v[%d]: %d<   >", i, values0[i]);
+    }
+*/
 } // read_values
 
 void init_DS1803( void ) 
