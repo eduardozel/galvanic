@@ -1,0 +1,25 @@
+
+        .state {
+            font-size: 1.5rem;
+            color: #120707;
+            font-weight: bold;
+        }
+
+        .btnStart {
+            padding: 15px 50px;
+            font-size: 16px;
+            text-align: center;
+            outline: none;
+            color: #fff;
+            background-color: #0ffa6d; //green
+            border: #0ffa6d;
+            border-radius: 5px;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+        }
+
