@@ -5,7 +5,6 @@
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
-//#include "freertos/task.h"
 
 #include "driver/rmt_tx.h"
 #include "led_strip_encoder.h"
@@ -112,9 +111,9 @@ void setAllLED( uint32_t red, uint32_t green, uint32_t blue, uint16_t hue )
 {
 	for (int j = 0; j < EXAMPLE_LED_NUMBERS; j ++) {
 	            led_strip_hsv2rgb(hue, 100, 100, &red, &green, &blue);
-                led_strip_pixels[j * 3 + 0] = green;
-                led_strip_pixels[j * 3 + 1] = blue;
-                led_strip_pixels[j * 3 + 2] = red;
+                led_strip_pixels[j * 3 + 0] = 210;// green
+                led_strip_pixels[j * 3 + 1] = 255;// red;
+                led_strip_pixels[j * 3 + 2] = 150;// blue
 	}
 	ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
     ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
@@ -127,4 +126,16 @@ void setAllLED( uint32_t red, uint32_t green, uint32_t blue, uint16_t hue )
  Пример с яркостью 50%:
    G = 105, R = 127, B = 75
  Но будьте осторожны: из-за нелинейности восприятия глаза, простое уменьшение в 2 раза может дать не совсем теплый белый.
+ 
+ Теплый белый: Используйте значения:
+
+    0xFF9632 (255, 150, 50) - стандартный теплый
+
+    0xFF8B1A (255, 139, 26) - более теплый оттенок
+	
+	
+            memset(led_strip_pixels, 0, sizeof(led_strip_pixels));
+            ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
+            ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+            vTaskDelay(pdMS_TO_TICKS(EXAMPLE_CHASE_SPEED_MS));
  */
