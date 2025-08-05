@@ -107,13 +107,21 @@ void initWS2812()
     };
 }
 
-void setAllLED( uint32_t red, uint32_t green, uint32_t blue, uint16_t hue )
+void offAllLED( )
+{
+	memset(led_strip_pixels, 0, sizeof(led_strip_pixels));
+	ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
+	ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+//	vTaskDelay(pdMS_TO_TICKS(EXAMPLE_CHASE_SPEED_MS));
+} // offAllLED
+
+void setAllLED( uint32_t red, uint32_t green, uint32_t blue )
 {
 	for (int j = 0; j < EXAMPLE_LED_NUMBERS; j ++) {
-	            led_strip_hsv2rgb(hue, 100, 100, &red, &green, &blue);
-                led_strip_pixels[j * 3 + 0] = 210;// green
-                led_strip_pixels[j * 3 + 1] = 255;// red;
-                led_strip_pixels[j * 3 + 2] = 150;// blue
+//	            led_strip_hsv2rgb(hue, 100, 100, &red, &green, &blue);
+		led_strip_pixels[j * 3 + 0] = green;
+		led_strip_pixels[j * 3 + 1] = red;
+		led_strip_pixels[j * 3 + 2] = blue;
 	}
 	ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
     ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
@@ -134,8 +142,4 @@ void setAllLED( uint32_t red, uint32_t green, uint32_t blue, uint16_t hue )
     0xFF8B1A (255, 139, 26) - более теплый оттенок
 	
 	
-            memset(led_strip_pixels, 0, sizeof(led_strip_pixels));
-            ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
-            ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
-            vTaskDelay(pdMS_TO_TICKS(EXAMPLE_CHASE_SPEED_MS));
  */

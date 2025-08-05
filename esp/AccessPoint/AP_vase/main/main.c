@@ -66,8 +66,8 @@ static char response_data[8192+4096];
 
 
 static void STOP( uint8_t ch ){
-	total_seconds[ch]= 0;
-
+  total_seconds[ch]= 0;
+  offAllLED();
 }
 
 static void init_led(){
@@ -75,7 +75,6 @@ static void init_led(){
     gpio_set_direction( LED_PIN, GPIO_MODE_OUTPUT);
 	led_state = 0;
 } // init_led
-
 
 void task_blink_led(void *arg) {
     while (1) {
@@ -313,9 +312,9 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 					const char *DUR   = cJSON_GetObjectItem(json, "duration")->valuestring;//->valueint;
 					int dsIDX = atoi(dsVAL);
                     if ( 0 == chanS ) {
-	
+	                  setAllLED(255, 210, 150 );
 					} else {
-	
+	                  setAllLED(  0, 210, 0 );
 					}
 					int duration = atoi(DUR)*60;
 					total_seconds[chanS] = duration;
@@ -435,8 +434,6 @@ void wifi_init_softap(void)
 }
 
 
-
-
 // ***************
 void app_main()
 {
@@ -465,9 +462,7 @@ void app_main()
 	initi_web_page_buffer();
 	setup_websocket_server();
 	
-	
-	
-//	setAllLED(255, 255, 255, 255 );
-	setAllLED(255, 210, 150, 255 );
-
-}
+	setAllLED( 0, 0, 150 );
+    vTaskDelay( 2000 );
+	offAllLED();
+} // main
