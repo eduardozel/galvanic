@@ -1,6 +1,6 @@
 #include <stdio.h>
-
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -36,11 +36,15 @@
 #define led_off 1
 
 
+static TaskHandle_t rainbow_task_handle = NULL;
+static bool rainbow_active = false;
+//static rmt_channel_handle_t led_chan = NULL;
+//static rmt_encoder_handle_t led_encoder = NULL;
+
 #define EXAMPLE_ESP_WIFI_SSID      "vase" // CONFIG_ESP_WIFI_SSID
-#define EXAMPLE_ESP_WIFI_PASS      "gvc123456" // CONFIG_ESP_WIFI_PASSWORD
+#define EXAMPLE_ESP_WIFI_PASS      "vase23456" // CONFIG_ESP_WIFI_PASSWORD
 #define EXAMPLE_ESP_WIFI_CHANNEL   5 // CONFIG_ESP_WIFI_CHANNEL
 #define EXAMPLE_MAX_STA_CONN       3 // CONFIG_ESP_MAX_STA_CONN
-
 
 
 httpd_handle_t server = NULL;
@@ -65,11 +69,6 @@ char style_css[2048];
 static char response_data[8192+4096];
 
 
-static void STOP( uint8_t ch ){
-  total_seconds[ch]= 0;
-  offAllLED();
-}
-
 static void init_led(){
     gpio_reset_pin(LED_PIN);
     gpio_set_direction( LED_PIN, GPIO_MODE_OUTPUT);
@@ -84,6 +83,90 @@ void task_blink_led(void *arg) {
         vTaskDelay( 1000 / portTICK_PERIOD_MS);
     }
 } // task_blink_led
+// * * * * * * * * 
+
+// - - - -  -
+// HSV to RGB conversion
+void hsv2rgb(float h, float s, float v, uint8_t *r, uint8_t *g, uint8_t *b) {
+    h = fmodf(h, 360.0f); // Wrap hue to 0-360
+    float c = v * s;
+    float x = c * (1.0f - fabsf(fmodf(h / 60.0f, 2.0f) - 1.0f));
+    float m = v - c;
+
+    float rp, gp, bp;
+    if (h >= 0 && h < 60) {
+        rp = c; gp = x; bp = 0;
+    } else if (h >= 60 && h < 120) {
+        rp = x; gp = c; bp = 0;
+    } else if (h >= 120 && h < 180) {
+        rp = 0; gp = c; bp = x;
+    } else if (h >= 180 && h < 240) {
+        rp = 0; gp = x; bp = c;
+    } else if (h >= 240 && h < 300) {
+        rp = x; gp = 0; bp = c;
+    } else {
+        rp = c; gp = 0; bp = x;
+    }
+
+    *r = (uint8_t)((rp + m) * 255);
+    *g = (uint8_t)((gp + m) * 255);
+    *b = (uint8_t)((bp + m) * 255);
+}
+// Rainbow task
+static void rainbow_task(void *arg) {
+    float hue = 0.0f;
+    float step = 360.0f / 32.0f; // 32 steps for full rainbow
+    int direction = 1; // 1: forward, -1: backward
+
+    while (rainbow_active) {
+        // Calculate RGB from HSV (S=1, V=1 max brightness)
+        uint8_t r, g, b;
+        hsv2rgb(hue, 1.0f, 1.0f, &r, &g, &b);
+
+        // Set color
+        setAllLED(r, g, b);
+
+        // Update hue
+        hue += direction * step;
+        if (hue >= 360.0f) {
+            hue = 360.0f;
+            direction = -1;
+        } else if (hue <= 0.0f) {
+            hue = 0.0f;
+            direction = 1;
+        }
+
+        // Delay for smooth transition (100ms per step)
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+    vTaskDelete(NULL);
+} // rainbow_task
+
+
+void start_rainbow(void) {
+    if (rainbow_active) return; // Already running
+//    init_ws2812(); // Ensure initialized
+    rainbow_active = true;
+    xTaskCreate(rainbow_task, "rainbow_task", 2048, NULL, 5, &rainbow_task_handle);
+} // start_rainbow
+
+void stop_rainbow(void) {
+    if (!rainbow_active) return;
+    rainbow_active = false;
+    if (rainbow_task_handle != NULL) {
+        vTaskDelay(pdMS_TO_TICKS(200)); // Wait a bit for task to exit loop
+        rainbow_task_handle = NULL;
+    }
+    offAllLED();
+} // stop_rainbow
+// * * * *  *
+static void STOP( uint8_t ch ){
+  total_seconds[ch]= 0;
+  stop_rainbow();
+  offAllLED();
+}
+
+//  / * / * / *
 
 void task_counter(void *arg) {
     while (1) {
@@ -312,9 +395,9 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 					const char *DUR   = cJSON_GetObjectItem(json, "duration")->valuestring;//->valueint;
 					int dsIDX = atoi(dsVAL);
                     if ( 0 == chanS ) {
-	                  setAllLED(255, 210, 150 );
+	                  fade_in_warm_white();
 					} else {
-	                  setAllLED(  0, 210, 0 );
+	                  start_rainbow();
 					}
 					int duration = atoi(DUR)*60;
 					total_seconds[chanS] = duration;
@@ -433,7 +516,6 @@ void wifi_init_softap(void)
              EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 }
 
-
 // ***************
 void app_main()
 {
@@ -462,7 +544,11 @@ void app_main()
 	initi_web_page_buffer();
 	setup_websocket_server();
 	
-	setAllLED( 0, 0, 150 );
+	fade_in_warm_white();
     vTaskDelay( 2000 );
 	offAllLED();
+    vTaskDelay( 2000 );
+	start_rainbow();
+    vTaskDelay( 2000 );
+    stop_rainbow();
 } // main

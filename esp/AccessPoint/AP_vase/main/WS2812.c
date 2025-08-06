@@ -12,12 +12,29 @@
 #define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 #define RMT_LED_STRIP_GPIO_NUM      8
 
-#define EXAMPLE_LED_NUMBERS         16
+#define RING_LED_NUMBERS            16
 #define EXAMPLE_CHASE_SPEED_MS      10
+
+
+// Структура для RGB
+typedef struct {
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+} rgb_t;
+
+// 16 ступеней (массив, уровни 1-16)
+const rgb_t warm_white_steps[16] = {
+    {16, 12, 6},   {32, 24, 13},  {48, 36, 19},  {64, 48, 25},
+    {80, 59, 31},  {96, 71, 38},  {112, 83, 44}, {128, 95, 50},
+    {144, 107, 56},{159, 119, 63}, {175, 131, 69}, {191, 143, 75},
+    {207, 154, 81}, {223, 166, 88}, {239, 178, 94}, {255, 190, 100}
+};
+
 
 static const char *TAG = "ws2812";
 
-static uint8_t led_strip_pixels[EXAMPLE_LED_NUMBERS * 3];
+static uint8_t led_strip_pixels[RING_LED_NUMBERS * 3];
 
 
     rmt_channel_handle_t       led_chan;
@@ -117,7 +134,7 @@ void offAllLED( )
 
 void setAllLED( uint32_t red, uint32_t green, uint32_t blue )
 {
-	for (int j = 0; j < EXAMPLE_LED_NUMBERS; j ++) {
+	for (int j = 0; j < RING_LED_NUMBERS; j ++) {
 //	            led_strip_hsv2rgb(hue, 100, 100, &red, &green, &blue);
 		led_strip_pixels[j * 3 + 0] = green;
 		led_strip_pixels[j * 3 + 1] = red;
@@ -127,6 +144,16 @@ void setAllLED( uint32_t red, uint32_t green, uint32_t blue )
     ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
 } // setAllLED
 
+
+void fade_in_warm_white()
+{
+	for (int step = 0; step < 16; step++) {
+//      ws2812_send(&warm_white_steps[step], LED_COUNT);
+      setAllLED( warm_white_steps[step].r, warm_white_steps[step].g, warm_white_steps[step].b);
+	  vTaskDelay(500 / portTICK_PERIOD_MS);  // Задержка 500 мс на шаг
+    }
+
+}
 //set_warm_white(); 
 // Теплый белый: GRB = 210, 255, 150
 /*
@@ -143,3 +170,4 @@ void setAllLED( uint32_t red, uint32_t green, uint32_t blue )
 	
 	
  */
+ 
