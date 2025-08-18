@@ -3,6 +3,8 @@
 #include <math.h>
 #include <string.h>
 
+#include <inttypes.h> // заголовок для макросов формата
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -30,22 +32,28 @@
 #include "WS2812.h"
 
 #define test_gpio 6
+#define BTN_PIN GPIO_NUM_6  // TTP223 SIG на GPIO6
 
 #define LED_PIN 8
 #define led_on  0
 #define led_off 1
 
+static bool LAMP_on = false;
+
+static QueueHandle_t touch_queue;  // +++ Очередь для прерываний
 
 static TaskHandle_t rainbow_task_handle = NULL;
 static bool rainbow_active = false;
-//static rmt_channel_handle_t led_chan = NULL;
-//static rmt_encoder_handle_t led_encoder = NULL;
 
 #define EXAMPLE_ESP_WIFI_SSID      "vase" // CONFIG_ESP_WIFI_SSID
 #define EXAMPLE_ESP_WIFI_PASS      "vase23456" // CONFIG_ESP_WIFI_PASSWORD
 #define EXAMPLE_ESP_WIFI_CHANNEL   5 // CONFIG_ESP_WIFI_CHANNEL
 #define EXAMPLE_MAX_STA_CONN       3 // CONFIG_ESP_MAX_STA_CONN
 
+#define DEFAULT_MAX_TIME 60     // max_time (сек), если не в файле
+
+static uint32_t max_time    = DEFAULT_MAX_TIME;  // Максимальное время свечения (сек)
+static uint32_t remain_time = DEFAULT_MAX_TIME;  // Оставшееся время (сек)
 
 httpd_handle_t server = NULL;
 struct async_resp_arg {
@@ -57,18 +65,48 @@ static const char *TAG = "AP vase";
 
 static int led_state = 0;
 
-static int total_seconds[2];
+static int total_seconds;
 static const int tick = 10;
+static int current_duration = 5*60;
+
 
 #define INDEX_HTML_PATH "/spiffs/start.html"
 #define STYLE_CSS_PATH  "/spiffs/styles.css"
+#define CONFIG_FILE     "/spiffs/config.txt"
 
 static char index_html[8192+4096];
 char style_css[2048];
 
 static char response_data[8192+4096];
 
+/* * * * * */
+// +++ Обработчик прерывания (касание)
+static void IRAM_ATTR touch_isr_handler(void* arg) {
+    BaseType_t higher_priority_task_woken = pdFALSE;
+    xQueueSendFromISR(touch_queue, NULL, &higher_priority_task_woken);
+}
 
+// Задача для обработки касаний
+static void touch_task(void* arg) {
+    while (1) {
+        if (xQueueReceive(touch_queue, NULL, portMAX_DELAY)) {
+            ESP_LOGI(TAG, "Touch detected");
+//            start_rainbow();
+            if (!LAMP_on) {
+              total_seconds = current_duration;
+              fade_in_warm_white();
+              LAMP_on = true;
+            } else {
+			  offAllLED();
+              LAMP_on = false;
+            } // if LAMP_on
+        } // if
+    } // while
+}
+
+
+
+/* * * * * * */
 static void init_led(){
     gpio_reset_pin(LED_PIN);
     gpio_set_direction( LED_PIN, GPIO_MODE_OUTPUT);
@@ -160,8 +198,51 @@ void stop_rainbow(void) {
     offAllLED();
 } // stop_rainbow
 // * * * *  *
+static void write_config_file(void) {
+    FILE *f = fopen(CONFIG_FILE, "w");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "Failed to open file for writing");
+        return;
+    }
+//!!!    fprintf(f, "max_time=%u\nremain_time=%u\n", max_time, remain_time);
+    fprintf(f, "max_time=%" PRIu32 "\nremain_time=%" PRIu32 "\n", max_time, remain_time);
+    fclose(f);
+//!!!	ESP_LOGI(TAG, "Config written: max_time=%u, remain_time=%u", max_time, remain_time);
+    ESP_LOGI(TAG, "Config written: max_time=%" PRIu32 "\nremain_time=%" PRIu32 "\n", max_time, remain_time);
+} // write_config_file
+
+static void read_config_file(void) {
+    FILE *f = fopen(CONFIG_FILE, "r");
+    if (f == NULL) {
+        ESP_LOGW(TAG, "File not found, using defaults");
+        max_time = DEFAULT_MAX_TIME;
+        remain_time = max_time;
+        write_config_file();  // Создаём файл с дефолтами
+        return;
+    }
+
+    char line[64];
+
+    while (fgets(line, sizeof(line), f)) {
+/*
+        if (sscanf(line, "max_time=%u", &max_time) == 1) {
+            ESP_LOGI(TAG, "Read max_time=%u", max_time);
+        } else if (sscanf(line, "remain_time=%u", &remain_time) == 1) {
+            ESP_LOGI(TAG, "Read remain_time=%u", remain_time);
+        }
+*/
+if (sscanf(line, "max_time=%" SCNu32, &max_time) == 1) {
+    ESP_LOGI(TAG, "Read max_time=%" PRIu32, max_time);
+} else if (sscanf(line, "remain_time=%" SCNu32, &remain_time) == 1) {
+    ESP_LOGI(TAG, "Read remain_time=%" PRIu32, remain_time);
+}
+    }
+    fclose(f);
+    if (remain_time > max_time) remain_time = max_time;
+} // read_config_file
+//-----------------
 static void STOP( uint8_t ch ){
-  total_seconds[ch]= 0;
+  total_seconds = 0;
   stop_rainbow();
   offAllLED();
 }
@@ -170,11 +251,8 @@ static void STOP( uint8_t ch ){
 
 void task_counter(void *arg) {
     while (1) {
-		if        ( total_seconds[0]   > tick ) { total_seconds[0] -= tick;
-		} else if ( total_seconds[0]  == tick ) { STOP(0);
-		}
-		if        ( total_seconds[1]   > tick ) { total_seconds[1] -= tick;
-		} else if ( total_seconds[1]  == tick ) { STOP(1);
+		if        ( total_seconds   > tick ) { total_seconds -= tick;
+		} else if ( total_seconds  == tick ) { STOP(0);
 		}
 		vTaskDelay( 10000 / portTICK_PERIOD_MS);
     }
@@ -188,6 +266,21 @@ void init_spiffs() {
         .format_if_mount_failed = true};
 
     ESP_ERROR_CHECK(esp_vfs_spiffs_register(&spiffs_conf));
+/*
+
+    // Инициализация SPIFFS
+    esp_vfs_spiffs_conf_t conf = {
+        .base_path = "/spiffs",
+        .partition_label = NULL,
+        .max_files = 5,
+        .format_if_mount_failed = true
+    };
+    esp_err_t ret = esp_vfs_spiffs_register(&conf);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
+        return;
+    }
+*/
 }; // init_spiffs
 
 static void initi_web_page_buffer(void)
@@ -292,7 +385,7 @@ static void ws_async_send(void *arg)
 
 
     char buffer[128];// = getVoltJS();
-    snprintf(buffer, sizeof(buffer), "{\"v1\": %.1f, \"v2\": %.1f, \"c1\": %.1f, \"c2\": %.1f, \"timer1\": \"%d\", \"timer2\": \"%d\" }", v1, v2, c1, c2, total_seconds[0], total_seconds[1] );
+    snprintf(buffer, sizeof(buffer), "{\"v1\": %.1f, \"v2\": %.1f, \"c1\": %.1f, \"c2\": %.1f, \"timer1\": \"%d\", \"timer2\": \"%d\" }", v1, v2, c1, c2, total_seconds, total_seconds );
     ESP_LOGI(TAG, "msg: %s", buffer);
     
     
@@ -400,7 +493,8 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 	                  start_rainbow();
 					}
 					int duration = atoi(DUR)*60;
-					total_seconds[chanS] = duration;
+					total_seconds = duration;
+					current_duration = duration;
 					ESP_LOGI(TAG, "start val: %s <idx> %d <duration> %d", dsVAL, dsIDX, duration); //duration
 				};
 				if ( chanF >= 0 ) {
@@ -528,14 +622,35 @@ void app_main()
     ESP_ERROR_CHECK(ret);
     init_spiffs();
 
-    total_seconds[0] = 0;
-	total_seconds[1] = 0;
+    total_seconds = 0;
 
     init_led();
+	read_config_file();
 	initWS2812();
 
     xTaskCreate(&task_blink_led, "BlinkLed",  4096, NULL, 5, NULL);
 	xTaskCreate(&task_counter,   "countdown", 4096, NULL, 5, NULL);
+
+
+    gpio_config_t io_conf = {
+//        .mode = GPIO_MODE_OUTPUT,
+//        .pin_bit_mask = (1ULL << LED_GPIO)
+    };
+
+
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = (1ULL << BTN_PIN);
+    io_conf.intr_type = GPIO_INTR_POSEDGE;  // Rising edge
+    io_conf.pull_down_en = 1;               // Pull-down для стабильности
+    gpio_config(&io_conf);
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(BTN_PIN, touch_isr_handler, NULL);
+
+    // Очередь и задача
+    touch_queue = xQueueCreate(10, 0);
+    xTaskCreate(touch_task, "touch_task", 2048, NULL, 10, NULL);
+
+
 
     ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
     wifi_init_softap();
@@ -545,10 +660,10 @@ void app_main()
 	setup_websocket_server();
 	
 	fade_in_warm_white();
-    vTaskDelay( 2000 );
+    vTaskDelay( 500 );
 	offAllLED();
-    vTaskDelay( 2000 );
-	start_rainbow();
-    vTaskDelay( 2000 );
-    stop_rainbow();
+//    vTaskDelay( 2000 );
+//	start_rainbow();
+//    vTaskDelay( 2000 );
+//    stop_rainbow();
 } // main
