@@ -8,6 +8,6 @@
 void initWS2812( void );
 void setAllLED( uint32_t red, uint32_t green, uint32_t blue );
 void offAllLED( void );
-void fade_in_warm_white(void );
+void fade_in_warm_white( int max );
 
 #endif

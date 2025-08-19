@@ -231,9 +231,10 @@
         }
 
         function btn_start1() {
-            const val = document.getElementById('val1').value;
+            const brightness = document.getElementById('brightness').value;
 			const duration = ''+(Number(document.getElementById('hr1').value)+Number(document.getElementById('mn1').value));
-            websocket.send(JSON.stringify({ act: 'start1', val, duration }));
+            const mode = document.getElementById('mode').value;
+            websocket.send(JSON.stringify({ act: 'start1', brightness, duration, mode }));
         }
 
         function btn_start2() {
@@ -252,15 +253,10 @@
 
     </script>
 	<table>
-<h1>Voltage Monitor</h1>
 <table border='1' align="center">
-<tr><th>warm white</th><th>rainbow</th></tr>
-
-<tr style='display:none' ><td id='v1' class = 'voltage'>- - -</td><td id='v2' class = 'voltage'>- - -</td>
+<tr style='display:none' ><td id='c1' class = 'current'>- - -</td><td style='display:none' id='c2' class = 'current'>- - -</td>
 </tr>
-<tr style='display:none' ><td id='c1' class = 'current'>- - -</td><td id='c2' class = 'current'>- - -</td>
-</tr>
-<tr><td id='counter1'  class = 'timer'>- - -</td><td id='counter2' class = 'timer'>- - -</td>
+<tr><td id='counter1'  class = 'timer'>- - -</td><td style='display:none' id='counter2' class = 'timer'>- - -</td>
 </tr>
 <tr>
 <td>
@@ -285,73 +281,65 @@
         <option value="45">45</option>
 	</select>
 </td>
-<td>
+<td style='display:none' >
     <select id="hr2" class = "clock">
         <option value= "0"></option>
-        <option value= "60">01 : </option>
-        <option value="120">02 : </option>
-        <option value="180">03 : </option>
-        <option value="240">04 : </option>
-        <option value="300">05 : </option>
-        <option value="360">06 : </option>
-        <option value="420">07 : </option>
-        <option value="480">08 : </option>
-        <option value="540">09 : </option>
-        <option value="600">10 : </option>
-        <option value="660">11 : </option>
 	</select>
     <select id="mn2" class = "clock">
         <option value="0">00</option>
-        <option value="15">15</option>
-        <option value="30">30</option>
-        <option value="45">45</option>
 	</select>
 </td>
 </tr>
-<tr style='display:none'>
+<tr>
 <td>
-    <select id="val1" class = "combo">
-        <option value= "0">off</option>
-        <option value= "1">0.2</option>
-        <option value= "2">0.4</option>
-        <option value= "3">0.6</option>
-        <option value= "4">0.8</option>
-        <option value= "5">1.0</option>
-        <option value= "6">1.2</option>
-        <option value= "7">1.4</option>
-        <option value= "8">1.6</option>
-        <option value= "9">1.8</option>
+    <select id="brightness" class = "combo">
+        <option value= "1"> 1</option>
+        <option value= "2"> 2</option>
+        <option value= "3"> 3</option>
+        <option value= "4"> 4</option>
+        <option value= "5"> 5</option>
+        <option value= "6"> 6</option>
+        <option value= "7"> 7</option>
+        <option value= "8"> 8</option>
+        <option value= "9"> 9</option>
+        <option value= "10">10</option>
+        <option value= "11">11</option>
+        <option value= "12">12</option>
+        <option value= "13">13</option>
+        <option value= "14">14</option>
+        <option value= "15">15</option>
 	</select>
 </td>
-<td>
+<td style='display:none' >
     <select id="val2" class = "combo">
         <option value="0">off</option>
-        <option value= "1">0.2</option>
-        <option value= "2">0.4</option>
-        <option value= "3">0.6</option>
-        <option value= "4">0.8</option>
-        <option value= "5">1.0</option>
-        <option value= "6">1.2</option>
-        <option value= "7">1.4</option>
-        <option value= "8">1.6</option>
-        <option value= "9">1.8</option>
     </select>
 </td>
 </tr>
 <tr>
 <td>
+    <select id="mode" class = "combo">
+        <option value="white">white</option>
+        <option value="rainbow">rainbow</option>
+        <option value="custom">custom</option>
+    </select>
+</td>
+<td style='display:none' id='v2' class = 'voltage'>- - -</td>
+</tr>
+<tr>
+<td>
     <button id="start1" class ="btnStart">START</button>
 </td>
-<td>
-    <button id="start2" class ="btnStart">START</button>
+<td style='display:none'>
+    <button style='display:none' id="start2" class ="btnStart">START</button>
 </td>
 </tr>
 <tr>
 <td>
     <button id="stop1" class ="btnStop">STOP</button>
 </td>
-<td>
-    <button id="stop2" class ="btnStop">STOP</button>
+<td style='display:none' >
+    <button style='display:none' id="stop2" class ="btnStop">STOP</button>
 </td>
 </tr>
 </table>

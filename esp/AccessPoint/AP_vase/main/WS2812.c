@@ -34,6 +34,8 @@ const rgb_t warm_white_steps[16] = {
 
 static const char *TAG = "ws2812";
 
+static int brightness = 4;
+
 static uint8_t led_strip_pixels[RING_LED_NUMBERS * 3];
 
 
@@ -145,9 +147,10 @@ void setAllLED( uint32_t red, uint32_t green, uint32_t blue )
 } // setAllLED
 
 
-void fade_in_warm_white()
+void fade_in_warm_white( int max )
 {
-	for (int step = 0; step < 16; step++) {
+    brightness = max;
+	for (int step = 0; step < max; step++) {
 //      ws2812_send(&warm_white_steps[step], LED_COUNT);
       setAllLED( warm_white_steps[step].r, warm_white_steps[step].g, warm_white_steps[step].b);
 	  vTaskDelay(500 / portTICK_PERIOD_MS);  // Задержка 500 мс на шаг

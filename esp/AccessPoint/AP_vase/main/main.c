@@ -31,16 +31,23 @@
 
 #include "WS2812.h"
 
-#define test_gpio 6
-#define BTN_PIN GPIO_NUM_6  // TTP223 SIG на GPIO6
+#define BTN_1 GPIO_NUM_6  // TTP223 SIG на GPIO6
 
 #define LED_PIN 8
 #define led_on  0
 #define led_off 1
 
 static bool LAMP_on = false;
+typedef enum {
+    white,
+    rainbow,
+    color 
+} LAMP_state_t;
 
-static QueueHandle_t touch_queue;  // +++ Очередь для прерываний
+static LAMP_state_t lamp_state = white;
+
+
+static QueueHandle_t button_queue;  // +++ Очередь для прерываний
 
 static TaskHandle_t rainbow_task_handle = NULL;
 static bool rainbow_active = false;
@@ -68,6 +75,7 @@ static int led_state = 0;
 static int total_seconds;
 static const int tick = 10;
 static int current_duration = 5*60;
+static int brightness = 4;
 
 
 #define INDEX_HTML_PATH "/spiffs/start.html"
@@ -78,51 +86,7 @@ static char index_html[8192+4096];
 char style_css[2048];
 
 static char response_data[8192+4096];
-
-/* * * * * */
-// +++ Обработчик прерывания (касание)
-static void IRAM_ATTR touch_isr_handler(void* arg) {
-    BaseType_t higher_priority_task_woken = pdFALSE;
-    xQueueSendFromISR(touch_queue, NULL, &higher_priority_task_woken);
-}
-
-// Задача для обработки касаний
-static void touch_task(void* arg) {
-    while (1) {
-        if (xQueueReceive(touch_queue, NULL, portMAX_DELAY)) {
-            ESP_LOGI(TAG, "Touch detected");
-//            start_rainbow();
-            if (!LAMP_on) {
-              total_seconds = current_duration;
-              fade_in_warm_white();
-              LAMP_on = true;
-            } else {
-			  offAllLED();
-              LAMP_on = false;
-            } // if LAMP_on
-        } // if
-    } // while
-}
-
-
-
-/* * * * * * */
-static void init_led(){
-    gpio_reset_pin(LED_PIN);
-    gpio_set_direction( LED_PIN, GPIO_MODE_OUTPUT);
-	led_state = 0;
-} // init_led
-
-void task_blink_led(void *arg) {
-    while (1) {
-        gpio_set_level(LED_PIN, led_off);
-        vTaskDelay(  500 / portTICK_PERIOD_MS);
-        gpio_set_level(LED_PIN, led_on);
-        vTaskDelay( 1000 / portTICK_PERIOD_MS);
-    }
-} // task_blink_led
-// * * * * * * * * 
-
+/***********************/
 // - - - -  -
 // HSV to RGB conversion
 void hsv2rgb(float h, float s, float v, uint8_t *r, uint8_t *g, uint8_t *b) {
@@ -197,6 +161,75 @@ void stop_rainbow(void) {
     }
     offAllLED();
 } // stop_rainbow
+/*==================*/
+//-----------------
+static void LAMP_turn_On(void){
+	total_seconds = current_duration;
+	if ( white == lamp_state ) {
+		fade_in_warm_white( brightness );
+	} else if ( rainbow == lamp_state ) {
+		start_rainbow();
+	};
+	LAMP_on = true;
+}; // LAMPon
+
+static void LAMP_turn_Off( void ){
+  total_seconds = 0;
+  stop_rainbow();
+  offAllLED();
+  LAMP_on = false;
+} // LAMP_turn_Off
+/* * * * * */
+// +++ Обработчик прерывания (касание)
+static void IRAM_ATTR touch_isr_handler(void* arg) {
+    BaseType_t higher_priority_task_woken = pdFALSE;
+	uint32_t btn = BTN_1;
+    xQueueSendFromISR( button_queue, &btn, &higher_priority_task_woken);
+}
+
+// Задача для обработки касаний
+static void touch_task(void* arg) {
+    uint32_t btn;
+//    static uint64_t last_time_on = 0;   // Для debounce TTP223
+//    static uint64_t last_time_off = 0;  // Для debounce кнопки OFF
+
+    while (1) {
+//        if (xQueueReceive(button_queue, NULL, portMAX_DELAY)) {
+        if (xQueueReceive(button_queue, &btn, portMAX_DELAY)) {
+//            uint64_t current_time = esp_timer_get_time();
+
+//            if (btn == BTN_1) {
+            ESP_LOGI(TAG, "Touch detected");
+//            start_rainbow();
+            if (!LAMP_on) {
+              LAMP_turn_On();
+            } else {
+			  offAllLED();
+              LAMP_on = false;
+            } // if LAMP_on
+        } // if
+    } // while
+}
+
+
+
+/* * * * * * */
+static void init_led(){
+    gpio_reset_pin(LED_PIN);
+    gpio_set_direction( LED_PIN, GPIO_MODE_OUTPUT);
+	led_state = 0;
+} // init_led
+
+void task_blink_led(void *arg) {
+    while (1) {
+        gpio_set_level(LED_PIN, led_off);
+        vTaskDelay(  500 / portTICK_PERIOD_MS);
+        gpio_set_level(LED_PIN, led_on);
+        vTaskDelay( 1000 / portTICK_PERIOD_MS);
+    }
+} // task_blink_led
+// * * * * * * * * 
+
 // * * * *  *
 static void write_config_file(void) {
     FILE *f = fopen(CONFIG_FILE, "w");
@@ -240,19 +273,12 @@ if (sscanf(line, "max_time=%" SCNu32, &max_time) == 1) {
     fclose(f);
     if (remain_time > max_time) remain_time = max_time;
 } // read_config_file
-//-----------------
-static void STOP( uint8_t ch ){
-  total_seconds = 0;
-  stop_rainbow();
-  offAllLED();
-}
 
 //  / * / * / *
-
 void task_counter(void *arg) {
     while (1) {
 		if        ( total_seconds   > tick ) { total_seconds -= tick;
-		} else if ( total_seconds  == tick ) { STOP(0);
+		} else if ( total_seconds  == tick ) { LAMP_turn_Off();
 		}
 		vTaskDelay( 10000 / portTICK_PERIOD_MS);
     }
@@ -484,21 +510,39 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 					return trigger_async_send(req->handle, req);
 				}
 				if ( chanS >= 0 ) {
-					const char *dsVAL = cJSON_GetObjectItem(json, "val")->valuestring;//->valueint;
-					const char *DUR   = cJSON_GetObjectItem(json, "duration")->valuestring;//->valueint;
-					int dsIDX = atoi(dsVAL);
-                    if ( 0 == chanS ) {
-	                  fade_in_warm_white();
+
+					cJSON *duration_item = cJSON_GetObjectItem(json, "duration");
+					int duration = 5;
+
+					if (duration_item != NULL) {
+						if (cJSON_IsNumber(duration_item)) {
+							duration = duration_item->valueint * 60; // minutes to seconds
+						} else {
+							ESP_LOGE("JSON", "Duration is not a number");
+						}
 					} else {
-	                  start_rainbow();
+						ESP_LOGE("JSON", "Duration item not found in JSON");
 					}
-					int duration = atoi(DUR)*60;
-					total_seconds = duration;
-					current_duration = duration;
-					ESP_LOGI(TAG, "start val: %s <idx> %d <duration> %d", dsVAL, dsIDX, duration); //duration
+
+					const cJSON *mode_item = cJSON_GetObjectItem(json, "mode");
+					if (mode_item != NULL && mode_item->type == cJSON_String) {
+						const char *mode = mode_item->valuestring;
+						if (strcmp(mode, "white") == 0) {
+							lamp_state = white;
+						} else {
+							lamp_state = rainbow;
+						}
+					} else {
+					};
+
+					const char *dsBR = cJSON_GetObjectItem(json, "brightness")->valuestring;//->valueint;
+                    brightness = atoi(dsBR);
+					LAMP_turn_On();
+
+					ESP_LOGI(TAG, "start brightness: %d <duration> %d", brightness, duration); //duration
 				};
 				if ( chanF >= 0 ) {
-					STOP(chanF);
+					LAMP_turn_Off();
 				}
 			} // if (json)
 			cJSON_Delete(json);
@@ -609,7 +653,6 @@ void wifi_init_softap(void)
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
              EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 }
-
 // ***************
 void app_main()
 {
@@ -639,31 +682,25 @@ void app_main()
 
 
     io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pin_bit_mask = (1ULL << BTN_PIN);
+    io_conf.pin_bit_mask = (1ULL << BTN_1);
     io_conf.intr_type = GPIO_INTR_POSEDGE;  // Rising edge
     io_conf.pull_down_en = 1;               // Pull-down для стабильности
     gpio_config(&io_conf);
     gpio_install_isr_service(0);
-    gpio_isr_handler_add(BTN_PIN, touch_isr_handler, NULL);
+    gpio_isr_handler_add(BTN_1, touch_isr_handler, NULL);
 
     // Очередь и задача
-    touch_queue = xQueueCreate(10, 0);
+    button_queue = xQueueCreate(10, 0);
     xTaskCreate(touch_task, "touch_task", 2048, NULL, 10, NULL);
-
-
 
     ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
     wifi_init_softap();
-//	
+
 	ESP_LOGI(TAG, "ESP32 ESP-IDF WebSocket Web Server is running ... ...\n");
 	initi_web_page_buffer();
 	setup_websocket_server();
 	
-	fade_in_warm_white();
-    vTaskDelay( 500 );
+	fade_in_warm_white( brightness );
+    vTaskDelay( 200 );
 	offAllLED();
-//    vTaskDelay( 2000 );
-//	start_rainbow();
-//    vTaskDelay( 2000 );
-//    stop_rainbow();
 } // main
