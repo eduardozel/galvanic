@@ -1,5 +1,4 @@
 <!DOCTYPE HTML>
-<!DOCTYPE HTML>
 <html>
 
 <head>
@@ -160,13 +159,37 @@
             user-select: none;
             -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
         }
+		
+		.number-input {
+            width: 80px;
+            padding: 12px;
+			text-align: right;
+			font-weight: bold;
+            font-size: 24px;
+			background-color: #F8F7F9;
+            border: 2px solid #3498db;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+
+        .number-input:focus {
+            outline: none;
+            border-color: #2980b9;
+            box-shadow: 0 0 8px rgba(52, 152, 219, 0.5);
+        }
+		
+		.label {
+			font-weight: bold;
+            font-size: 16px;
+			margin-right: 5px;
+		}
     </style>
 
 </head>
 
 <body>
     <div class="topnav">
-        <h1>Vase Server v 1.1</h1>
+        <h1>Vase Server v 1.0</h1>
     </div>
     <script>
         var gateway = `ws://${window.location.hostname}/ws`;
@@ -189,30 +212,17 @@
         function onMessage(event) {
             console.log(event.data);
 			var data = JSON.parse(event.data);
-            document.getElementById('v1').innerText = data.v1;
-            document.getElementById('v2').innerText = data.v2;
 
-            document.getElementById('c1').innerText = data.c1;
-            document.getElementById('c2').innerText = data.c2;
-
-			const cnt1 = data.timer1;
+			const cnt = data.timer;
 			if ( cnt1 > 0 ) {
-				const min1 = Math.floor( cnt1 / 60);
-				const sec1 = cnt1 - min1 * 60;
-				document.getElementById('counter1').innerText = min1 + ':' + sec1;
+				const min = Math.floor( cnt / 60);
+				const sec = cnt - min * 60;
+				document.getElementById('counter').innerText = min + ':' + sec;
 			} else {
-				document.getElementById('counter1').innerText = '- - -';
-			}
-			const cnt2 = data.timer2;
-			if ( cnt2 > 0 ) {
-				const cnt2 = data.timer2;
-				const min2 = Math.floor( cnt2 / 60);
-				const sec2 = cnt2 - min2 * 60;
-				document.getElementById('counter2').innerText = min2 + ':' + sec2;
-			} else {
-				document.getElementById('counter2').innerText = '- - -';
+				document.getElementById('counter').innerText = '- - -';
 			}
         }
+
         function onLoad(event) {
             initWebSocket();
             initButton();
@@ -224,43 +234,61 @@
         }
 
         function initButton() {
-            document.getElementById('start1').addEventListener('click', btn_start1);
-            document.getElementById('start2').addEventListener('click', btn_start2);
-            document.getElementById('stop1').addEventListener('click',  btn_stop1);
-            document.getElementById('stop2').addEventListener('click',  btn_stop2);
-        }
+            document.getElementById('start').addEventListener('click', btn_start);
+            document.getElementById('stop').addEventListener('click',  btn_stop);
+            document.getElementById('mode').addEventListener('change', toggleColors);
+		} // initButton()
 
-        function btn_start1() {
+        function btn_start() {
+		
+			var redInput   = document.getElementById('red');
+			var greenInput = document.getElementById('green');
+			var blueInput = document.getElementById('blue');
+
+			var red   = parseInt(redInput.value,   10) || 0;
+			var green = parseInt(greenInput.value, 10) || 0;
+			var blue  = parseInt(blueInput.value,  10) || 0;
+
+
+        // range 0-255
+            red   = Math.max(0, Math.min(255, red));
+			green = Math.max(0, Math.min(255, green));
+			blue  = Math.max(0, Math.min(255, blue));
+
+			redInput.value   = red;
+			greenInput.value = green;
+			blueInput.value  = blue;
+			
             const brightness = document.getElementById('brightness').value;
-			const duration = ''+(Number(document.getElementById('hr1').value)+Number(document.getElementById('mn1').value));
+			const duration = ''+(Number(document.getElementById('hr').value)+Number(document.getElementById('mn').value));
             const mode = document.getElementById('mode').value;
-            websocket.send(JSON.stringify({ act: 'start1', brightness, duration, mode }));
+            websocket.send(JSON.stringify({ act: 'start', brightness, duration, mode, red, green, blue }));
         }
 
-        function btn_start2() {
-            const val = document.getElementById('val2').value;
-			const duration = ''+(Number(document.getElementById('hr2').value)+Number(document.getElementById('mn2').value));
-            websocket.send(JSON.stringify({ act: 'start2', val, duration}));
+        function btn_stop() {
+            websocket.send(JSON.stringify({ act: 'stop' }));
         }
-        function btn_stop1() {
-            websocket.send(JSON.stringify({ act: 'stop1' }));
-        }
+		
+		function toggleColors() {
+            var modeSelect = document.getElementById('mode');
+            var customRow = document.getElementById('colors');
 
-        function btn_stop2() {
-            websocket.send(JSON.stringify({ act: 'stop2' }));
-        }
-
+			if (modeSelect.value === 'custom') {
+				colors.style.display = '';  // Показать (сброс display к дефолтному)
+			} else {
+				colors.style.display = 'none';  // Скрыть
+			}
+    }
 
     </script>
 	<table>
 <table border='1' align="center">
-<tr style='display:none' ><td id='c1' class = 'current'>- - -</td><td style='display:none' id='c2' class = 'current'>- - -</td>
 </tr>
-<tr><td id='counter1'  class = 'timer'>- - -</td><td style='display:none' id='counter2' class = 'timer'>- - -</td>
+<tr><td id='counter'  class = 'timer'>- - -</td>
 </tr>
 <tr>
 <td>
-    <select id="hr1" class = "clock">
+    <select id="hr" class = "clock">
         <option value="0"></option>
         <option value= "60">01 : </option>
         <option value="120">02 : </option>
@@ -274,25 +302,17 @@
         <option value="600">10 : </option>
         <option value="660">11 : </option>
 	</select>
-    <select id="mn1" class = "clock">
-        <option value="0">00</option>
+    <select id="mn" class = "clock">
+        <option value= "0">00</option>
         <option value="15">15</option>
         <option value="30">30</option>
         <option value="45">45</option>
 	</select>
 </td>
-<td style='display:none' >
-    <select id="hr2" class = "clock">
-        <option value= "0"></option>
-	</select>
-    <select id="mn2" class = "clock">
-        <option value="0">00</option>
-	</select>
-</td>
 </tr>
 <tr>
 <td>
-    <select id="brightness" class = "combo">
+    <select id="brightness" class = "clock">
         <option value= "1"> 1</option>
         <option value= "2"> 2</option>
         <option value= "3"> 3</option>
@@ -310,36 +330,49 @@
         <option value= "15">15</option>
 	</select>
 </td>
-<td style='display:none' >
-    <select id="val2" class = "combo">
-        <option value="0">off</option>
-    </select>
-</td>
 </tr>
 <tr>
 <td>
-    <select id="mode" class = "combo">
+    <select id="mode" class = "clock">
         <option value="white">white</option>
         <option value="rainbow">rainbow</option>
         <option value="custom">custom</option>
     </select>
 </td>
-<td style='display:none' id='v2' class = 'voltage'>- - -</td>
+</tr>
+<tr style='display:none' id="colors">
+<td>
+<input id="red"
+            type="number" 
+            id="nRED" 
+            class="number-input" 
+            min="0" 
+            max="255"
+>
+<input id="green"
+            type="number" 
+            id="nGREEN" 
+            class="number-input" 
+            min="0" 
+            max="255"
+>
+<input id="blue"
+            type="number" 
+            id="nBLUE" 
+            class="number-input" 
+            min="0" 
+            max="255"
+>
+</td>
 </tr>
 <tr>
 <td>
-    <button id="start1" class ="btnStart">START</button>
-</td>
-<td style='display:none'>
-    <button style='display:none' id="start2" class ="btnStart">START</button>
+    <button id="start" class ="btnStart">START</button>
 </td>
 </tr>
 <tr>
 <td>
-    <button id="stop1" class ="btnStop">STOP</button>
-</td>
-<td style='display:none' >
-    <button style='display:none' id="stop2" class ="btnStop">STOP</button>
+    <button id="stop" class ="btnStop">STOP</button>
 </td>
 </tr>
 </table>

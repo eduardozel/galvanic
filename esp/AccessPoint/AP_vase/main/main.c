@@ -211,8 +211,6 @@ static void touch_task(void* arg) {
     } // while
 }
 
-
-
 /* * * * * * */
 static void init_led(){
     gpio_reset_pin(LED_PIN);
@@ -394,24 +392,8 @@ static void ws_async_send(void *arg)
     httpd_handle_t hd = resp_arg->hd;
     int fd = resp_arg->fd;
 
-	uint32_t voltage1 = 23;//adc1_get_raw(ADC_v1);  // int analogVolts = analogReadMilliVolts(2);
-	uint32_t voltage2 = 43;//adc1_get_raw(ADC_v2);
-
-	uint32_t current1 = 100;//adc1_get_raw(ADC_c1);
-	uint32_t current2 = 200;//adc1_get_raw(ADC_c2);
-
-	
-	// (0-4095 -> 0-2.5 V)
-	float v1 = (voltage1 / 4095.0) * 2.5; 
-	float v2 = (voltage2 / 4095.0) * 2.5;
-
-	// (0-4095 -> 0-2.5 V)
-	float c1 = (current1 / 1.0); 
-	float c2 = (current2 / 1.0);
-
-
-    char buffer[128];// = getVoltJS();
-    snprintf(buffer, sizeof(buffer), "{\"v1\": %.1f, \"v2\": %.1f, \"c1\": %.1f, \"c2\": %.1f, \"timer1\": \"%d\", \"timer2\": \"%d\" }", v1, v2, c1, c2, total_seconds, total_seconds );
+    char buffer[128];
+    snprintf(buffer, sizeof(buffer), "{\"timer\": \"%d\" }", total_seconds );
     ESP_LOGI(TAG, "msg: %s", buffer);
     
     
@@ -498,14 +480,10 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 				int chanS = -1;
 				int chanF = -1;
 				const char *action = cJSON_GetObjectItem(json, "act")->valuestring;
-				if (strcmp(action, "start1") == 0) {
+				if (strcmp(action, "start") == 0) {
 					chanS =0;
-				} else if (strcmp(action, "start2") == 0) {
-					chanS =1;
-				} else if (strcmp(action, "stop1") == 0) {
+				} else if (strcmp(action, "stop") == 0) {
 					chanF = 0;
-				} else if (strcmp(action, "stop2") == 0) {
-					chanF = 1;
 				} else if (strcmp(action, "getState") == 0) {
 					return trigger_async_send(req->handle, req);
 				}
@@ -535,11 +513,19 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 					} else {
 					};
 
-					const char *dsBR = cJSON_GetObjectItem(json, "brightness")->valuestring;//->valueint;
+
+					const cJSON *red_item = cJSON_GetObjectItem(json, "red");
+					if (red_item != NULL && red_item->type == cJSON_String) {
+						const char *red = red_item->valuestring;
+					} else {
+					};
+
+
+					const char *dsBR = cJSON_GetObjectItem(json, "brightness")->valuestring;
                     brightness = atoi(dsBR);
 					LAMP_turn_On();
 
-					ESP_LOGI(TAG, "start brightness: %d <duration> %d", brightness, duration); //duration
+					ESP_LOGI(TAG, "start brightness: %d <duration> %d", brightness, duration);
 				};
 				if ( chanF >= 0 ) {
 					LAMP_turn_Off();
