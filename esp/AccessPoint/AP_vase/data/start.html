@@ -214,10 +214,10 @@
 			var data = JSON.parse(event.data);
 
 			const cnt = data.timer;
-			if ( cnt1 > 0 ) {
+			if ( cnt > 0 ) {
 				const min = Math.floor( cnt / 60);
 				const sec = cnt - min * 60;
-				document.getElementById('counter').innerText = min + ':' + sec;
+				document.getElementById('counter').innerText = min + ':' + String(sec).padStart(2, '0');
 			} else {
 				document.getElementById('counter').innerText = '- - -';
 			}
@@ -260,7 +260,7 @@
 			blueInput.value  = blue;
 			
             const brightness = document.getElementById('brightness').value;
-			const duration = ''+(Number(document.getElementById('hr').value)+Number(document.getElementById('mn').value));
+			const duration = ( parseInt(document.getElementById('hr').value,   10) || 0 ) + Number(document.getElementById('mn').value);
             const mode = document.getElementById('mode').value;
             websocket.send(JSON.stringify({ act: 'start', brightness, duration, mode, red, green, blue }));
         }

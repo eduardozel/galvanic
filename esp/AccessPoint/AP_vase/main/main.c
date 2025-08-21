@@ -44,6 +44,8 @@ typedef enum {
     color 
 } LAMP_state_t;
 
+static rgb_t custom_color;
+
 static LAMP_state_t lamp_state = white;
 
 
@@ -88,33 +90,7 @@ char style_css[2048];
 static char response_data[8192+4096];
 /***********************/
 // - - - -  -
-// HSV to RGB conversion
-void hsv2rgb(float h, float s, float v, uint8_t *r, uint8_t *g, uint8_t *b) {
-    h = fmodf(h, 360.0f); // Wrap hue to 0-360
-    float c = v * s;
-    float x = c * (1.0f - fabsf(fmodf(h / 60.0f, 2.0f) - 1.0f));
-    float m = v - c;
 
-    float rp, gp, bp;
-    if (h >= 0 && h < 60) {
-        rp = c; gp = x; bp = 0;
-    } else if (h >= 60 && h < 120) {
-        rp = x; gp = c; bp = 0;
-    } else if (h >= 120 && h < 180) {
-        rp = 0; gp = c; bp = x;
-    } else if (h >= 180 && h < 240) {
-        rp = 0; gp = x; bp = c;
-    } else if (h >= 240 && h < 300) {
-        rp = x; gp = 0; bp = c;
-    } else {
-        rp = c; gp = 0; bp = x;
-    }
-
-    *r = (uint8_t)((rp + m) * 255);
-    *g = (uint8_t)((gp + m) * 255);
-    *b = (uint8_t)((bp + m) * 255);
-}
-// Rainbow task
 static void rainbow_task(void *arg) {
     float hue = 0.0f;
     float step = 360.0f / 32.0f; // 32 steps for full rainbow
@@ -122,13 +98,9 @@ static void rainbow_task(void *arg) {
 
     while (rainbow_active) {
         // Calculate RGB from HSV (S=1, V=1 max brightness)
-        uint8_t r, g, b;
-        hsv2rgb(hue, 1.0f, 1.0f, &r, &g, &b);
+        rgb_t color = hsv2rgb(hue, 1.0f, 1.0f);
+        setAllLED(color.red, color.green, color.blue );
 
-        // Set color
-        setAllLED(r, g, b);
-
-        // Update hue
         hue += direction * step;
         if (hue >= 360.0f) {
             hue = 360.0f;
@@ -138,8 +110,7 @@ static void rainbow_task(void *arg) {
             direction = 1;
         }
 
-        // Delay for smooth transition (100ms per step)
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pdMS_TO_TICKS( 400));
     }
     vTaskDelete(NULL);
 } // rainbow_task
@@ -147,7 +118,6 @@ static void rainbow_task(void *arg) {
 
 void start_rainbow(void) {
     if (rainbow_active) return; // Already running
-//    init_ws2812(); // Ensure initialized
     rainbow_active = true;
     xTaskCreate(rainbow_task, "rainbow_task", 2048, NULL, 5, &rainbow_task_handle);
 } // start_rainbow
@@ -159,7 +129,6 @@ void stop_rainbow(void) {
         vTaskDelay(pdMS_TO_TICKS(200)); // Wait a bit for task to exit loop
         rainbow_task_handle = NULL;
     }
-    offAllLED();
 } // stop_rainbow
 /*==================*/
 //-----------------
@@ -477,26 +446,29 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 			cJSON *json = cJSON_Parse((char *)ws_pkt.payload);
 			free(buf);
 			if (json) {
-				int chanS = -1;
+				int cmdStart = -1;
 				int chanF = -1;
 				const char *action = cJSON_GetObjectItem(json, "act")->valuestring;
 				if (strcmp(action, "start") == 0) {
-					chanS =0;
+					cmdStart =0;
 				} else if (strcmp(action, "stop") == 0) {
 					chanF = 0;
 				} else if (strcmp(action, "getState") == 0) {
 					return trigger_async_send(req->handle, req);
 				}
-				if ( chanS >= 0 ) {
+				if ( cmdStart >= 0 ) {
 
 					cJSON *duration_item = cJSON_GetObjectItem(json, "duration");
 					int duration = 5;
 
 					if (duration_item != NULL) {
 						if (cJSON_IsNumber(duration_item)) {
-							duration = duration_item->valueint * 60; // minutes to seconds
+							int duration = duration_item->valueint * 60; // minutes to seconds
+							current_duration = duration;
+							ESP_LOGI("current duration", "+++");
 						} else {
-							ESP_LOGE("JSON", "Duration is not a number");
+							const char *dstr = duration_item->valuestring;
+							ESP_LOGE("JSON", "Duration is not a number> %s", dstr);
 						}
 					} else {
 						ESP_LOGE("JSON", "Duration item not found in JSON");
@@ -516,10 +488,13 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 
 					const cJSON *red_item = cJSON_GetObjectItem(json, "red");
 					if (red_item != NULL && red_item->type == cJSON_String) {
-						const char *red = red_item->valuestring;
+						if (cJSON_IsNumber(red_item)) {
+						  custom_color.red = red_item->valueint;
+						} else {
+							custom_color.red = 0;
+						};
 					} else {
 					};
-
 
 					const char *dsBR = cJSON_GetObjectItem(json, "brightness")->valuestring;
                     brightness = atoi(dsBR);

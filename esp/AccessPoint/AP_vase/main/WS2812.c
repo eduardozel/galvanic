@@ -1,5 +1,8 @@
 #include "WS2812.h"
 
+#include <stdint.h>
+#include <math.h>
+
 #include <stdlib.h>
 #include "esp_log.h"
 #include <string.h>
@@ -15,13 +18,6 @@
 #define RING_LED_NUMBERS            16
 #define EXAMPLE_CHASE_SPEED_MS      10
 
-
-// Структура для RGB
-typedef struct {
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-} rgb_t;
 
 // 16 ступеней (массив, уровни 1-16)
 const rgb_t warm_white_steps[16] = {
@@ -51,6 +47,8 @@ static uint8_t led_strip_pixels[RING_LED_NUMBERS * 3];
  * Wiki: https://en.wikipedia.org/wiki/HSL_and_HSV
  * https://github.com/espressif/esp-idf/tree/master/examples/peripherals/rmt/led_strip_simple_encoder
  */
+ 
+ /*
 void led_strip_hsv2rgb(uint32_t h, uint32_t s, uint32_t v, uint32_t *r, uint32_t *g, uint32_t *b)
 {
     h %= 360; // h -> [0,360]
@@ -96,7 +94,36 @@ void led_strip_hsv2rgb(uint32_t h, uint32_t s, uint32_t v, uint32_t *r, uint32_t
         break;
     }
 }
+*/
 
+
+rgb_t hsv2rgb(float h, float s, float v) {
+    h = fmodf(h, 360.0f); // Нормализация hue в диапазон [0, 360)
+    float c = v * s;
+    float x = c * (1.0f - fabsf(fmodf(h / 60.0f, 2.0f) - 1.0f));
+    float m = v - c;
+    
+    float rp, gp, bp;
+    if (h >= 0 && h < 60) {
+        rp = c; gp = x; bp = 0;
+    } else if (h >= 60 && h < 120) {
+        rp = x; gp = c; bp = 0;
+    } else if (h >= 120 && h < 180) {
+        rp = 0; gp = c; bp = x;
+    } else if (h >= 180 && h < 240) {
+        rp = 0; gp = x; bp = c;
+    } else if (h >= 240 && h < 300) {
+        rp = x; gp = 0; bp = c;
+    } else {
+        rp = c; gp = 0; bp = x;
+    }
+    
+    rgb_t color;
+    color.red = (uint8_t)((rp + m) * 255);
+    color.green = (uint8_t)((gp + m) * 255);
+    color.blue = (uint8_t)((bp + m) * 255);
+    return color;
+}
 
 void initWS2812()
 {
@@ -152,7 +179,7 @@ void fade_in_warm_white( int max )
     brightness = max;
 	for (int step = 0; step < max; step++) {
 //      ws2812_send(&warm_white_steps[step], LED_COUNT);
-      setAllLED( warm_white_steps[step].r, warm_white_steps[step].g, warm_white_steps[step].b);
+      setAllLED( warm_white_steps[step].red, warm_white_steps[step].green, warm_white_steps[step].blue);
 	  vTaskDelay(500 / portTICK_PERIOD_MS);  // Задержка 500 мс на шаг
     }
 
