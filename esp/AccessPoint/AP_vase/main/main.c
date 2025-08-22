@@ -59,10 +59,12 @@ static bool rainbow_active = false;
 #define EXAMPLE_ESP_WIFI_CHANNEL   5 // CONFIG_ESP_WIFI_CHANNEL
 #define EXAMPLE_MAX_STA_CONN       3 // CONFIG_ESP_MAX_STA_CONN
 
+/*
 #define DEFAULT_MAX_TIME 60     // max_time (сек), если не в файле
 
 static uint32_t max_time    = DEFAULT_MAX_TIME;  // Максимальное время свечения (сек)
 static uint32_t remain_time = DEFAULT_MAX_TIME;  // Оставшееся время (сек)
+*/
 
 httpd_handle_t server = NULL;
 struct async_resp_arg {
@@ -204,19 +206,18 @@ static void write_config_file(void) {
         ESP_LOGE(TAG, "Failed to open file for writing");
         return;
     }
-//!!!    fprintf(f, "max_time=%u\nremain_time=%u\n", max_time, remain_time);
-    fprintf(f, "max_time=%" PRIu32 "\nremain_time=%" PRIu32 "\n", max_time, remain_time);
+    fprintf(f, "brightness=%d\nduration=%d", brightness, current_duration ); //    fprintf(f, "max_time=%" PRIu32 "\nremain_time=%" PRIu32 "\n", max_time, remain_time);
+    ESP_LOGI(TAG, "Config written:\n brightness=%d\nduration=%d", brightness, current_duration);
     fclose(f);
-//!!!	ESP_LOGI(TAG, "Config written: max_time=%u, remain_time=%u", max_time, remain_time);
-    ESP_LOGI(TAG, "Config written: max_time=%" PRIu32 "\nremain_time=%" PRIu32 "\n", max_time, remain_time);
 } // write_config_file
 
 static void read_config_file(void) {
+	ESP_LOGI(TAG, "read_config_file");
     FILE *f = fopen(CONFIG_FILE, "r");
     if (f == NULL) {
         ESP_LOGW(TAG, "File not found, using defaults");
-        max_time = DEFAULT_MAX_TIME;
-        remain_time = max_time;
+        current_duration = 5;
+        brightness = 3;
         write_config_file();  // Создаём файл с дефолтами
         return;
     }
@@ -224,21 +225,13 @@ static void read_config_file(void) {
     char line[64];
 
     while (fgets(line, sizeof(line), f)) {
-/*
-        if (sscanf(line, "max_time=%u", &max_time) == 1) {
-            ESP_LOGI(TAG, "Read max_time=%u", max_time);
-        } else if (sscanf(line, "remain_time=%u", &remain_time) == 1) {
-            ESP_LOGI(TAG, "Read remain_time=%u", remain_time);
+        if (sscanf(line, "brightness=%d", &brightness) == 1) {                       // if (sscanf(line, "max_time=%" SCNu32, &max_time) == 1) {
+            ESP_LOGI(TAG, "Read brightness=%d", brightness);                         //     ESP_LOGI(TAG, "Read max_time=%" PRIu32, max_time);
+        } else if (sscanf(line, "duration=%d", &current_duration) == 1) {
+            ESP_LOGI(TAG, "Read current_duration=%d", current_duration);
         }
-*/
-if (sscanf(line, "max_time=%" SCNu32, &max_time) == 1) {
-    ESP_LOGI(TAG, "Read max_time=%" PRIu32, max_time);
-} else if (sscanf(line, "remain_time=%" SCNu32, &remain_time) == 1) {
-    ESP_LOGI(TAG, "Read remain_time=%" PRIu32, remain_time);
-}
-    }
+    } // while
     fclose(f);
-    if (remain_time > max_time) remain_time = max_time;
 } // read_config_file
 
 //  / * / * / *
@@ -446,17 +439,17 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 			cJSON *json = cJSON_Parse((char *)ws_pkt.payload);
 			free(buf);
 			if (json) {
-				int cmdStart = -1;
+				bool cmdStart = false;
 				int chanF = -1;
 				const char *action = cJSON_GetObjectItem(json, "act")->valuestring;
 				if (strcmp(action, "start") == 0) {
-					cmdStart =0;
+					cmdStart = true;
 				} else if (strcmp(action, "stop") == 0) {
 					chanF = 0;
 				} else if (strcmp(action, "getState") == 0) {
 					return trigger_async_send(req->handle, req);
 				}
-				if ( cmdStart >= 0 ) {
+				if ( cmdStart  ) {
 
 					cJSON *duration_item = cJSON_GetObjectItem(json, "duration");
 					int duration = 5;
@@ -498,10 +491,11 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 
 					const char *dsBR = cJSON_GetObjectItem(json, "brightness")->valuestring;
                     brightness = atoi(dsBR);
+					write_config_file();
 					LAMP_turn_On();
 
 					ESP_LOGI(TAG, "start brightness: %d <duration> %d", brightness, duration);
-				};
+				}; // cmdStart
 				if ( chanF >= 0 ) {
 					LAMP_turn_Off();
 				}
@@ -617,6 +611,7 @@ void wifi_init_softap(void)
 // ***************
 void app_main()
 {
+	ESP_LOGI(TAG, "... ... ... ... MAIN ... ... ... ...\n");
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
@@ -629,7 +624,6 @@ void app_main()
     total_seconds = 0;
 
     init_led();
-	read_config_file();
 	initWS2812();
 
     xTaskCreate(&task_blink_led, "BlinkLed",  4096, NULL, 5, NULL);
@@ -650,7 +644,6 @@ void app_main()
     gpio_install_isr_service(0);
     gpio_isr_handler_add(BTN_1, touch_isr_handler, NULL);
 
-    // Очередь и задача
     button_queue = xQueueCreate(10, 0);
     xTaskCreate(touch_task, "touch_task", 2048, NULL, 10, NULL);
 
@@ -660,6 +653,7 @@ void app_main()
 	ESP_LOGI(TAG, "ESP32 ESP-IDF WebSocket Web Server is running ... ...\n");
 	initi_web_page_buffer();
 	setup_websocket_server();
+	read_config_file();
 	
 	fade_in_warm_white( brightness );
     vTaskDelay( 200 );
