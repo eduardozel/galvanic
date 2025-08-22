@@ -38,15 +38,16 @@
 #define led_off 1
 
 static bool LAMP_on = false;
+
 typedef enum {
     white,
     rainbow,
-    color 
+    custom 
 } LAMP_state_t;
 
-static rgb_t custom_color;
-
 static LAMP_state_t lamp_state = white;
+static rgb_t custom_color;
+static int brightness = 4;
 
 
 static QueueHandle_t button_queue;  // +++ Очередь для прерываний
@@ -79,7 +80,6 @@ static int led_state = 0;
 static int total_seconds;
 static const int tick = 10;
 static int current_duration = 5*60;
-static int brightness = 4;
 
 
 #define INDEX_HTML_PATH "/spiffs/start.html"
@@ -101,7 +101,7 @@ static void rainbow_task(void *arg) {
     while (rainbow_active) {
         // Calculate RGB from HSV (S=1, V=1 max brightness)
         rgb_t color = hsv2rgb(hue, 1.0f, 1.0f);
-        setAllLED(color.red, color.green, color.blue );
+        setAllLED(color );
 
         hue += direction * step;
         if (hue >= 360.0f) {
@@ -137,9 +137,16 @@ void stop_rainbow(void) {
 static void LAMP_turn_On(void){
 	total_seconds = current_duration;
 	if ( white == lamp_state ) {
-		fade_in_warm_white( brightness );
+	  ESP_LOGI(TAG, "white");
+	  fade_in_warm_white( brightness );
+	} else if ( custom == lamp_state ) {
+	  ESP_LOGI(TAG, "custom\nred=%d",custom_color.red);
+      setAllLED( custom_color );
 	} else if ( rainbow == lamp_state ) {
-		start_rainbow();
+	  ESP_LOGI(TAG, "rainbow");
+	  start_rainbow();
+	} else {
+	  ESP_LOGE(TAG, "uncnown lamp_state");
 	};
 	LAMP_on = true;
 }; // LAMPon
@@ -206,7 +213,8 @@ static void write_config_file(void) {
         ESP_LOGE(TAG, "Failed to open file for writing");
         return;
     }
-    fprintf(f, "brightness=%d\nduration=%d", brightness, current_duration ); //    fprintf(f, "max_time=%" PRIu32 "\nremain_time=%" PRIu32 "\n", max_time, remain_time);
+    fprintf(f, "brightness=%d\nduration=%d\n", brightness, current_duration ); //    fprintf(f, "max_time=%" PRIu32 "\nremain_time=%" PRIu32 "\n", max_time, remain_time);
+    fprintf(f, "red=%d\ngreen=%d\nblue=%d\n", custom_color.red, custom_color.green, custom_color.blue);
     ESP_LOGI(TAG, "Config written:\n brightness=%d\nduration=%d", brightness, current_duration);
     fclose(f);
 } // write_config_file
@@ -440,17 +448,17 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 			free(buf);
 			if (json) {
 				bool cmdStart = false;
-				int chanF = -1;
+				bool cmdStop  = false;
 				const char *action = cJSON_GetObjectItem(json, "act")->valuestring;
 				if (strcmp(action, "start") == 0) {
 					cmdStart = true;
 				} else if (strcmp(action, "stop") == 0) {
-					chanF = 0;
+					cmdStop = true;
 				} else if (strcmp(action, "getState") == 0) {
 					return trigger_async_send(req->handle, req);
 				}
-				if ( cmdStart  ) {
 
+				if ( cmdStart  ) {
 					cJSON *duration_item = cJSON_GetObjectItem(json, "duration");
 					int duration = 5;
 
@@ -458,7 +466,6 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 						if (cJSON_IsNumber(duration_item)) {
 							int duration = duration_item->valueint * 60; // minutes to seconds
 							current_duration = duration;
-							ESP_LOGI("current duration", "+++");
 						} else {
 							const char *dstr = duration_item->valuestring;
 							ESP_LOGE("JSON", "Duration is not a number> %s", dstr);
@@ -472,19 +479,42 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 						const char *mode = mode_item->valuestring;
 						if (strcmp(mode, "white") == 0) {
 							lamp_state = white;
-						} else {
-							lamp_state = rainbow;
+						} else if (strcmp(mode, "custom") == 0) {
+							lamp_state = custom;
 						}
 					} else {
 					};
 
-
 					const cJSON *red_item = cJSON_GetObjectItem(json, "red");
-					if (red_item != NULL && red_item->type == cJSON_String) {
+					if (red_item != NULL ) {
+						ESP_LOGI("red item", "+");
 						if (cJSON_IsNumber(red_item)) {
+						  ESP_LOGI("red item", "+++");
 						  custom_color.red = red_item->valueint;
 						} else {
+							const char *r_str = red_item->valuestring;
+							ESP_LOGE("JSON", "red is not a number> %s", r_str);
 							custom_color.red = 0;
+						};
+					} else {
+					};
+
+					const cJSON *green_item = cJSON_GetObjectItem(json, "green");
+					if (green_item != NULL ) {
+						if (cJSON_IsNumber(green_item)) {
+						  custom_color.green = green_item->valueint;
+						} else {
+							custom_color.green = 0;
+						};
+					} else {
+					};
+
+					const cJSON *blue_item = cJSON_GetObjectItem(json, "blue");
+					if (blue_item != NULL ) {
+						if (cJSON_IsNumber(blue_item)) {
+						  custom_color.blue = blue_item->valueint;
+						} else {
+							custom_color.green = 0;
 						};
 					} else {
 					};
@@ -496,7 +526,7 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 
 					ESP_LOGI(TAG, "start brightness: %d <duration> %d", brightness, duration);
 				}; // cmdStart
-				if ( chanF >= 0 ) {
+				if ( cmdStop ) {
 					LAMP_turn_Off();
 				}
 			} // if (json)

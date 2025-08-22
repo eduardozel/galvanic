@@ -12,7 +12,8 @@ typedef struct {
 } rgb_t;
 
 void initWS2812( void );
-void setAllLED( uint32_t red, uint32_t green, uint32_t blue );
+void setAllLED_rgb( uint32_t red, uint32_t green, uint32_t blue ); // uint8_t
+void setAllLED( rgb_t color );
 void offAllLED( void );
 void fade_in_warm_white( int max );
 rgb_t hsv2rgb(float h, float s, float v);

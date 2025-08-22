@@ -161,7 +161,7 @@ void offAllLED( )
 //	vTaskDelay(pdMS_TO_TICKS(EXAMPLE_CHASE_SPEED_MS));
 } // offAllLED
 
-void setAllLED( uint32_t red, uint32_t green, uint32_t blue )
+void setAllLED_rgb( uint32_t red, uint32_t green, uint32_t blue )
 {
 	for (int j = 0; j < RING_LED_NUMBERS; j ++) {
 //	            led_strip_hsv2rgb(hue, 100, 100, &red, &green, &blue);
@@ -173,13 +173,16 @@ void setAllLED( uint32_t red, uint32_t green, uint32_t blue )
     ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
 } // setAllLED
 
+void setAllLED( rgb_t color ){
+  setAllLED_rgb( color.red, color.green, color.blue );
+};// setAllLED
 
 void fade_in_warm_white( int max )
 {
     brightness = max;
 	for (int step = 0; step < max; step++) {
 //      ws2812_send(&warm_white_steps[step], LED_COUNT);
-      setAllLED( warm_white_steps[step].red, warm_white_steps[step].green, warm_white_steps[step].blue);
+      setAllLED_rgb( warm_white_steps[step].red, warm_white_steps[step].green, warm_white_steps[step].blue);
 	  vTaskDelay(500 / portTICK_PERIOD_MS);  // Задержка 500 мс на шаг
     }
 
