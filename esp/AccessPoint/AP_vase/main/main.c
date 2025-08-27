@@ -40,10 +40,20 @@
 static bool LAMP_on = false;
 
 typedef enum {
-    white,
-    rainbow,
-    custom 
+    white   = 0,
+    rainbow = 1,
+    custom  = 2
 } LAMP_state_t;
+
+static const char *lamp_state_to_str(LAMP_state_t s)
+{
+    switch (s) {
+    case white:   return "white";
+    case rainbow: return "rainbow";
+    case custom:  return "custom";
+    default:      return "unknown";
+    }
+}
 
 static LAMP_state_t lamp_state = white;
 static rgb_t custom_color;
@@ -84,12 +94,14 @@ static int current_duration = 5*60;
 
 #define INDEX_HTML_PATH "/spiffs/start.html"
 #define STYLE_CSS_PATH  "/spiffs/styles.css"
+#define SCRIPT_JS_PATH  "/spiffs/script.js"
 #define CONFIG_FILE     "/spiffs/config.txt"
 
 static char index_html[8192+4096];
-char style_css[2048];
+static char style_css[4096];
+static char script_js[4096]; 
 
-static char response_data[8192+4096];
+//static char response_data[8192+4096];
 /***********************/
 // - - - -  -
 
@@ -215,7 +227,8 @@ static void write_config_file(void) {
     }
     fprintf(f, "brightness=%d\nduration=%d\n", brightness, current_duration ); //    fprintf(f, "max_time=%" PRIu32 "\nremain_time=%" PRIu32 "\n", max_time, remain_time);
     fprintf(f, "red=%d\ngreen=%d\nblue=%d\n", custom_color.red, custom_color.green, custom_color.blue);
-    ESP_LOGI(TAG, "Config written:\n brightness=%d\nduration=%d", brightness, current_duration);
+    ESP_LOGI(TAG, "Config written:\n brightness=%d\nduration=%d\n", brightness, current_duration);
+	fprintf(f, "lamp_state=%d\n",(int)lamp_state);
     fclose(f);
 } // write_config_file
 
@@ -233,10 +246,14 @@ static void read_config_file(void) {
     char line[64];
 
     while (fgets(line, sizeof(line), f)) {
+		int tmp;
         if (sscanf(line, "brightness=%d", &brightness) == 1) {                       // if (sscanf(line, "max_time=%" SCNu32, &max_time) == 1) {
             ESP_LOGI(TAG, "Read brightness=%d", brightness);                         //     ESP_LOGI(TAG, "Read max_time=%" PRIu32, max_time);
         } else if (sscanf(line, "duration=%d", &current_duration) == 1) {
             ESP_LOGI(TAG, "Read current_duration=%d", current_duration);
+        } else if (sscanf(line, "lamp_state=%d", &tmp) == 1) {
+			lamp_state = (LAMP_state_t)tmp;
+            ESP_LOGI(TAG, "Read lamp_state=%d", lamp_state);
         }
     } // while
     fclose(f);
@@ -280,7 +297,6 @@ void init_spiffs() {
 static void initi_web_page_buffer(void)
 {
     memset((void *)index_html, 0, sizeof(index_html));
-	memset((void *)style_css,  0, sizeof(style_css));
     struct stat st;
     if (stat(INDEX_HTML_PATH, &st))
     {
@@ -294,43 +310,94 @@ static void initi_web_page_buffer(void)
         ESP_LOGE(TAG, "fread failed");
     }
     fclose(fp);
-/*
+// CSS ----
+    memset((void *)style_css, 0, sizeof(style_css));
     if (stat(STYLE_CSS_PATH, &st))
     {
-        ESP_LOGE(TAG, "styles.css not found");
+        ESP_LOGE(TAG, "Failed to open %s", STYLE_CSS_PATH);
         return;
     }
-	
+
+    if (st.st_size >= sizeof(style_css)) {
+        ESP_LOGE(TAG, "styles.css too large (%ld bytes), buffer is %d", st.st_size, sizeof(style_css));
+        return;
+    }
+
     fp = fopen(STYLE_CSS_PATH, "r");
-    if (fread(style_css, st.st_size, 1, fp) == 0)
-    {
+    size_t css_size = fread(style_css, 1, st.st_size, fp);
+//    if (fread(style_css, st.st_size, 1, fp) == 0) {
+	if (css_size == 0) {
         ESP_LOGE(TAG, "fread failed for styles.css");
+    } else {
+        style_css[css_size] = '\0';  // Нулевой терминатор (не обязательно для CSS, но полезно для strlen)
+        ESP_LOGI(TAG, "Loaded styles.css, size: %d", css_size);
+    } // if
+    fclose(fp);
+// JS
+    memset((void *)script_js, 0, sizeof(script_js));
+    if (stat(SCRIPT_JS_PATH, &st)) {
+        ESP_LOGE(TAG, "not found: %s", SCRIPT_JS_PATH);
+        return;
+    }
+    if (st.st_size >= sizeof(script_js)) {
+        ESP_LOGE(TAG, "script.js too large (%ld bytes)", st.st_size);
+        return;
+    }
+    fp = fopen(SCRIPT_JS_PATH, "r");
+    if (fp == NULL) {
+        ESP_LOGE(TAG, "Failed to open %s", SCRIPT_JS_PATH);
+        return;
+    }
+    size_t js_size = fread(script_js, 1, st.st_size, fp);
+    if (js_size == 0) {
+        ESP_LOGE(TAG, "fread failed for script.js");
+    } else {
+        script_js[js_size] = '\0';
+        ESP_LOGI(TAG, "Loaded script.js, size: %d", js_size);
     }
     fclose(fp);
-*/
+
 } // initi_web_page_buffer
 
+
 esp_err_t style_handler(httpd_req_t *req) {
-    FILE *file = fopen(STYLE_CSS_PATH, "r");
-    if (!file) {
-        ESP_LOGE("style_handler", "Failed to open styles.css");
+    // Проверяем, загружен ли CSS в память
+    ESP_LOGI(TAG, "---------style_handler ---------styles.css");
+    if (style_css[0] == '\0') {  // Если буфер пустой (не загружен)
+        ESP_LOGE(TAG, "styles.css not loaded in memory");
         httpd_resp_send_404(req);
         return ESP_FAIL;
     }
-	fseek(file, 0, SEEK_END);
-    long size = ftell(file);
-    fseek(file, 0, SEEK_SET);
-    ESP_LOGI(TAG, "------------------styles.css size: %ld", size);
-    char buffer[1024];
-    size_t read_bytes;
-    while ((read_bytes = fread(buffer, 1, sizeof(buffer), file)) > 0) {
-        httpd_resp_send_chunk(req, buffer, read_bytes);
+
+    size_t css_len = strlen(style_css);  // Длина из буфера (благодаря \0)
+    ESP_LOGI(TAG, "Serving styles.css from memory, size: %d", css_len);
+
+     httpd_resp_set_type(req, "text/css");    // Устанавливаем тип контента (важно для браузера!)
+
+    // Опционально: заголовки для кэша (чтобы браузер не запрашивал каждый раз)
+    httpd_resp_set_hdr(req, "Cache-Control", "max-age=3600");  // Кэш на 1 час
+
+    esp_err_t ret = httpd_resp_send(req, style_css, css_len);     // Отправляем данные одним куском (поскольку файл маленький)
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to send styles.css: %s", esp_err_to_name(ret));
+        return ret;
     }
-    fclose(file);
-    httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
 } // style_handler
 
+
+esp_err_t js_handler(httpd_req_t *req) {
+    if (script_js[0] == '\0') {
+        ESP_LOGE(TAG, "script.js not loaded");
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+    size_t js_len = strlen(script_js);
+    ESP_LOGI(TAG, "Serving script.js from memory, size: %d", js_len);
+    httpd_resp_set_type(req, "application/javascript");  // Тип для JS
+    httpd_resp_set_hdr(req, "Cache-Control", "max-age=3600");
+    return httpd_resp_send(req, script_js, js_len);
+} // js_handler
 
 static esp_err_t get_req_handler(httpd_req_t *req) {
     // Обработка GET-запроса для корневого пути
@@ -360,10 +427,10 @@ static void ws_async_send(void *arg)
     httpd_ws_frame_t ws_pkt;
     struct async_resp_arg *resp_arg = arg;
     httpd_handle_t hd = resp_arg->hd;
-    int fd = resp_arg->fd;
+//    int fd = resp_arg->fd;
 
     char buffer[128];
-    snprintf(buffer, sizeof(buffer), "{\"timer\": \"%d\" }", total_seconds );
+    snprintf(buffer, sizeof(buffer), "{\"timer\": %d, \"red\": %d }", total_seconds, custom_color.red );
     ESP_LOGI(TAG, "msg: %s", buffer);
     
     
@@ -536,6 +603,12 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
     return ESP_OK;
 }
 
+esp_err_t not_found_handler(httpd_req_t *req) {
+    ESP_LOGE(TAG, "404: URI not found: %s", req->uri);
+    httpd_resp_send_404(req);
+    return ESP_OK;
+}
+
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
 {
@@ -574,12 +647,28 @@ httpd_handle_t setup_websocket_server(void)
 		.user_ctx = NULL
 	};
 
+	httpd_uri_t js_uri = {
+		.uri = "/script.js",
+		.method = HTTP_GET,
+		.handler = js_handler,
+		.user_ctx = NULL
+	};
+
+	httpd_uri_t not_found_uri = {
+		.uri = "/*",  // Для всех URI
+		.method = HTTP_GET,
+		.handler = not_found_handler,
+		.user_ctx = NULL
+	};
+
     if (httpd_start(&server, &config) == ESP_OK)
     {
         httpd_register_uri_handler(server, &uri_get);
         httpd_register_uri_handler(server, &ws);
 		httpd_register_uri_handler(server, &style_uri);
-   }
+		httpd_register_uri_handler(server, &js_uri);
+		httpd_register_uri_handler(server, &not_found_uri);
+    }
 
     return server;
 } // setup_websocket_server
