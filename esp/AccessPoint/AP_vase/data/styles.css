@@ -1,6 +1,10 @@
         html {
-            font-family: New Times Roman;
+            font-family: "Times New Roman", Times, serif;
             text-align: center;
+        }
+
+        body {
+            margin: 0;
         }
 
         h1 {
@@ -13,9 +17,11 @@
             background-color: #04296d;
         }
 
-        body {
-            margin: 0;
-        }
+		.state {
+			font-size: 1.5rem;
+			color: #120707;
+			font-weight: bold;
+		}
 
         .button:active {
             background-color: #fa0f0f;
@@ -38,7 +44,13 @@
             -ms-user-select: none;
             user-select: none;
             -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
-        }
+			transition: background-color 0.3s ease; /* Плавный переход цвета за 0.3 секунды */
+			cursor: pointer; /* указатель мыши как рука */
+		}
+
+		.btnStart:hover {
+			background-color: #0cd85a; /* Hover эффект */
+		}
 
         .btnStop {
             padding: 15px 50px;
@@ -47,25 +59,7 @@
             outline: none;
             color: #fff;
             background-color: #fa0f0f;
-            border: #0ffa6d;
-            border-radius: 5px;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            -khtml-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-            -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
-        }
-        .combo {
-            padding: 15px 50px;
-            font-size: 48px;
-            font-weight: bold;
-            text-align: center;
-            outline: none;
-            color: #07156d;
-            background-color: #F8F7F9;
-            border: #0ffa6d;
+            border: 2px solid #fa0f0f;
             border-radius: 5px;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
@@ -76,43 +70,24 @@
             -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
         }
 
-
-        .timer {
-            padding: 10px 10px;
-            font-size: 24px;
-            font-weight: bold;
-            text-align: center;
-            outline: none;
-            color: #07156d;
-            background-color: #F8F7F9;
-            border: #0ffa6d;
-            border-radius: 5px;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            -khtml-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-            -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
-        }
-
-        .clock {
-            padding: 15px 15px;
-            font-size: 24px;
-            font-weight: bold;
-            outline: none;
-            color: #07156d;
-            background-color: #F8F7F9;
-            border: #0ffa6d;
-            border-radius: 5px;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            -khtml-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-            -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
-        }
+		.combo, .timer, .clock {
+			padding: 10px 10px; /* Объединено для похожих классов */
+			font-size: 24px;
+			font-weight: bold;
+			text-align: center;
+			outline: none;
+			color: #07156d;
+			background-color: #F8F7F9;
+			border: 2px solid #0ffa6d; /* Исправлено */
+			border-radius: 5px;
+			-webkit-touch-callout: none;
+			-webkit-user-select: none;
+			-khtml-user-select: none;
+			-moz-user-select: none;
+			-ms-user-select: none;
+			user-select: none;
+			-webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+		}
 		
 		.number-input {
             width: 80px;

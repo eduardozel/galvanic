@@ -45,6 +45,8 @@ typedef enum {
     custom  = 2
 } LAMP_state_t;
 
+
+
 static const char *lamp_state_to_str(LAMP_state_t s)
 {
     switch (s) {
@@ -54,6 +56,33 @@ static const char *lamp_state_to_str(LAMP_state_t s)
     default:      return "unknown";
     }
 }
+
+static int lamp_state_from_str(const char *s, LAMP_state_t *out)
+{
+    if (!s || !out) return -1;
+    if (strcasecmp(s, "white") == 0) {
+        *out = white;
+    } else if (strcasecmp(s, "rainbow") == 0) {
+        *out = rainbow;
+    } else if (strcasecmp(s, "color") == 0) {
+        *out = custom;
+    } else {
+        /* попробовать прочитать как число: */
+        char *end;
+        long v = strtol(s, &end, 10);
+        if (end != s) {
+            if (v == white || v == rainbow || v == custom) {
+                *out = (LAMP_state_t)v;
+            } else {
+                return -1;
+            }
+        } else {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 
 static LAMP_state_t lamp_state = white;
 static rgb_t custom_color;
@@ -97,12 +126,21 @@ static int current_duration = 5*60;
 #define SCRIPT_JS_PATH  "/spiffs/script.js"
 #define CONFIG_FILE     "/spiffs/config.txt"
 
-static char index_html[8192+4096];
+static char index_html[4096];
 static char style_css[4096];
-static char script_js[4096]; 
+static char script_js[4096+2048]; 
 
 //static char response_data[8192+4096];
 /***********************/
+
+void monitor_wifi_status() {
+    wifi_ap_record_t ap_info;
+    esp_err_t ret = esp_wifi_sta_get_ap_info(&ap_info);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "RSSI: %d dBm", ap_info.rssi);
+    }
+} // monitor_wifi_status
+
 // - - - -  -
 
 static void rainbow_task(void *arg) {
@@ -375,7 +413,9 @@ esp_err_t style_handler(httpd_req_t *req) {
      httpd_resp_set_type(req, "text/css");    // Устанавливаем тип контента (важно для браузера!)
 
     // Опционально: заголовки для кэша (чтобы браузер не запрашивал каждый раз)
-    httpd_resp_set_hdr(req, "Cache-Control", "max-age=3600");  // Кэш на 1 час
+    httpd_resp_set_hdr(req, "Cache-Control", "max-age=3600");  // Кэш на 1 час; no-cache для тестов.
+//    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");  // no-cache для тестов.
+//    httpd_resp_set_hdr(req, "Cache-Control", "no-cache, no-store, must-revalidate")
 
     esp_err_t ret = httpd_resp_send(req, style_css, css_len);     // Отправляем данные одним куском (поскольку файл маленький)
     if (ret != ESP_OK) {
@@ -394,8 +434,9 @@ esp_err_t js_handler(httpd_req_t *req) {
     }
     size_t js_len = strlen(script_js);
     ESP_LOGI(TAG, "Serving script.js from memory, size: %d", js_len);
-    httpd_resp_set_type(req, "application/javascript");  // Тип для JS
-    httpd_resp_set_hdr(req, "Cache-Control", "max-age=3600");
+    httpd_resp_set_type(req, "application/javascript");
+    //httpd_resp_set_hdr(req, "Cache-Control", "max-age=3600"); // Кэш на 1 час;
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache"); // no-cache для тестов.
     return httpd_resp_send(req, script_js, js_len);
 } // js_handler
 
@@ -429,7 +470,7 @@ static void ws_async_send(void *arg)
     httpd_handle_t hd = resp_arg->hd;
 //    int fd = resp_arg->fd;
 
-    char buffer[128];
+    char buffer[256];
     snprintf(buffer, sizeof(buffer), "{\"timer\": %d, \"red\": %d }", total_seconds, custom_color.red );
     ESP_LOGI(TAG, "msg: %s", buffer);
     
@@ -468,6 +509,7 @@ static esp_err_t trigger_async_send(httpd_handle_t handle, httpd_req_t *req)
 
 static esp_err_t handle_ws_req(httpd_req_t *req)
 {
+    ESP_LOGI(TAG, "===================== handle_ws_req");
     if (req->method == HTTP_GET)
     {
         ESP_LOGI(TAG, "Handshake done, the new connection was opened");
@@ -485,6 +527,12 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
         return ret;
     }
 
+    ESP_LOGI(TAG, "Frame length: %d", ws_pkt.len);
+	if (ws_pkt.len > 512) {
+        ESP_LOGE(TAG, "Frame too long: %d", ws_pkt.len);
+        return ESP_FAIL;
+    }
+	
     if (ws_pkt.len)
     {
         buf = calloc(1, ws_pkt.len + 1);
@@ -504,7 +552,7 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
         ESP_LOGI(TAG, "Got packet with message: %s", ws_pkt.payload);
     }
 
-//??    ESP_LOGI(TAG, "frame len is %d", ws_pkt.len);
+    ESP_LOGI(TAG, "frame len is %d", ws_pkt.len);
 
     if (ws_pkt.type == HTTPD_WS_TYPE_TEXT) {
 		if ( strcmp((char *)ws_pkt.payload, "toggle") == 0) {
@@ -526,6 +574,7 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 				}
 
 				if ( cmdStart  ) {
+					monitor_wifi_status();
 					cJSON *duration_item = cJSON_GetObjectItem(json, "duration");
 					int duration = 5;
 
@@ -545,18 +594,20 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 					if (mode_item != NULL && mode_item->type == cJSON_String) {
 						const char *mode = mode_item->valuestring;
 						if (strcmp(mode, "white") == 0) {
-							lamp_state = white;
+							lamp_state = white;   ESP_LOGI("start>", "white");
 						} else if (strcmp(mode, "custom") == 0) {
-							lamp_state = custom;
+							lamp_state = custom;  ESP_LOGI("start>", "custom");
+						} else if (strcmp(mode, "rainbow") == 0) {
+							lamp_state = rainbow; ESP_LOGI("start>", "rainbow"); 
+						} else {
+							ESP_LOGE("start>", "unknown mode");
 						}
 					} else {
 					};
 
 					const cJSON *red_item = cJSON_GetObjectItem(json, "red");
 					if (red_item != NULL ) {
-						ESP_LOGI("red item", "+");
 						if (cJSON_IsNumber(red_item)) {
-						  ESP_LOGI("red item", "+++");
 						  custom_color.red = red_item->valueint;
 						} else {
 							const char *r_str = red_item->valuestring;
@@ -608,6 +659,7 @@ esp_err_t not_found_handler(httpd_req_t *req) {
     httpd_resp_send_404(req);
     return ESP_OK;
 }
+
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
