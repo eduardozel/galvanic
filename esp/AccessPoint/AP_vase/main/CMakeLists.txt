@@ -1,5 +1,6 @@
 set(srcs "main.c"
         "WS2812.c"
+        "lamp.c"
 	"led_strip_encoder.c"     )
 idf_component_register(SRCS ${srcs}
                     INCLUDE_DIRS ".")

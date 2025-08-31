@@ -1,10 +1,11 @@
 #ifndef WS2812_H_
 #define WS2812_H_
 
+
+
 #include <stdlib.h>
 #include <string.h>
 
-//  structure RGB
 typedef struct {
     uint8_t red;
     uint8_t green;

@@ -28,8 +28,7 @@
 
 #include "driver/gpio.h"
 
-
-#include "WS2812.h"
+#include "lamp.h"
 
 #define BTN_1 GPIO_NUM_6  // TTP223 SIG на GPIO6
 
@@ -37,74 +36,12 @@
 #define led_on  0
 #define led_off 1
 
-static bool LAMP_on = false;
-
-typedef enum {
-    white   = 0,
-    rainbow = 1,
-    custom  = 2
-} LAMP_state_t;
-
-
-
-static const char *lamp_state_to_str(LAMP_state_t s)
-{
-    switch (s) {
-    case white:   return "white";
-    case rainbow: return "rainbow";
-    case custom:  return "custom";
-    default:      return "unknown";
-    }
-}
-
-static int lamp_state_from_str(const char *s, LAMP_state_t *out)
-{
-    if (!s || !out) return -1;
-    if (strcasecmp(s, "white") == 0) {
-        *out = white;
-    } else if (strcasecmp(s, "rainbow") == 0) {
-        *out = rainbow;
-    } else if (strcasecmp(s, "color") == 0) {
-        *out = custom;
-    } else {
-        /* попробовать прочитать как число: */
-        char *end;
-        long v = strtol(s, &end, 10);
-        if (end != s) {
-            if (v == white || v == rainbow || v == custom) {
-                *out = (LAMP_state_t)v;
-            } else {
-                return -1;
-            }
-        } else {
-            return -1;
-        }
-    }
-    return 0;
-}
-
-
-static LAMP_state_t lamp_state = white;
-static rgb_t custom_color;
-static int brightness = 4;
-
-
 static QueueHandle_t button_queue;  // +++ Очередь для прерываний
-
-static TaskHandle_t rainbow_task_handle = NULL;
-static bool rainbow_active = false;
 
 #define EXAMPLE_ESP_WIFI_SSID      "vase" // CONFIG_ESP_WIFI_SSID
 #define EXAMPLE_ESP_WIFI_PASS      "vase23456" // CONFIG_ESP_WIFI_PASSWORD
-#define EXAMPLE_ESP_WIFI_CHANNEL   5 // CONFIG_ESP_WIFI_CHANNEL
+#define EXAMPLE_ESP_WIFI_CHANNEL   6 // CONFIG_ESP_WIFI_CHANNEL
 #define EXAMPLE_MAX_STA_CONN       3 // CONFIG_ESP_MAX_STA_CONN
-
-/*
-#define DEFAULT_MAX_TIME 60     // max_time (сек), если не в файле
-
-static uint32_t max_time    = DEFAULT_MAX_TIME;  // Максимальное время свечения (сек)
-static uint32_t remain_time = DEFAULT_MAX_TIME;  // Оставшееся время (сек)
-*/
 
 httpd_handle_t server = NULL;
 struct async_resp_arg {
@@ -116,15 +53,11 @@ static const char *TAG = "AP vase";
 
 static int led_state = 0;
 
-static int total_seconds;
 static const int tick = 10;
-static int current_duration = 5*60;
-
 
 #define INDEX_HTML_PATH "/spiffs/start.html"
 #define STYLE_CSS_PATH  "/spiffs/styles.css"
 #define SCRIPT_JS_PATH  "/spiffs/script.js"
-#define CONFIG_FILE     "/spiffs/config.txt"
 
 static char index_html[4096];
 static char style_css[4096];
@@ -143,70 +76,6 @@ void monitor_wifi_status() {
 
 // - - - -  -
 
-static void rainbow_task(void *arg) {
-    float hue = 0.0f;
-    float step = 360.0f / 32.0f; // 32 steps for full rainbow
-    int direction = 1; // 1: forward, -1: backward
-
-    while (rainbow_active) {
-        // Calculate RGB from HSV (S=1, V=1 max brightness)
-        rgb_t color = hsv2rgb(hue, 1.0f, 1.0f);
-        setAllLED(color );
-
-        hue += direction * step;
-        if (hue >= 360.0f) {
-            hue = 360.0f;
-            direction = -1;
-        } else if (hue <= 0.0f) {
-            hue = 0.0f;
-            direction = 1;
-        }
-
-        vTaskDelay(pdMS_TO_TICKS( 400));
-    }
-    vTaskDelete(NULL);
-} // rainbow_task
-
-
-void start_rainbow(void) {
-    if (rainbow_active) return; // Already running
-    rainbow_active = true;
-    xTaskCreate(rainbow_task, "rainbow_task", 2048, NULL, 5, &rainbow_task_handle);
-} // start_rainbow
-
-void stop_rainbow(void) {
-    if (!rainbow_active) return;
-    rainbow_active = false;
-    if (rainbow_task_handle != NULL) {
-        vTaskDelay(pdMS_TO_TICKS(200)); // Wait a bit for task to exit loop
-        rainbow_task_handle = NULL;
-    }
-} // stop_rainbow
-/*==================*/
-//-----------------
-static void LAMP_turn_On(void){
-	total_seconds = current_duration;
-	if ( white == lamp_state ) {
-	  ESP_LOGI(TAG, "white");
-	  fade_in_warm_white( brightness );
-	} else if ( custom == lamp_state ) {
-	  ESP_LOGI(TAG, "custom\nred=%d",custom_color.red);
-      setAllLED( custom_color );
-	} else if ( rainbow == lamp_state ) {
-	  ESP_LOGI(TAG, "rainbow");
-	  start_rainbow();
-	} else {
-	  ESP_LOGE(TAG, "uncnown lamp_state");
-	};
-	LAMP_on = true;
-}; // LAMPon
-
-static void LAMP_turn_Off( void ){
-  total_seconds = 0;
-  stop_rainbow();
-  offAllLED();
-  LAMP_on = false;
-} // LAMP_turn_Off
 /* * * * * */
 // +++ Обработчик прерывания (касание)
 static void IRAM_ATTR touch_isr_handler(void* arg) {
@@ -240,12 +109,6 @@ static void touch_task(void* arg) {
 }
 
 /* * * * * * */
-static void init_led(){
-    gpio_reset_pin(LED_PIN);
-    gpio_set_direction( LED_PIN, GPIO_MODE_OUTPUT);
-	led_state = 0;
-} // init_led
-
 void task_blink_led(void *arg) {
     while (1) {
         gpio_set_level(LED_PIN, led_off);
@@ -254,48 +117,15 @@ void task_blink_led(void *arg) {
         vTaskDelay( 1000 / portTICK_PERIOD_MS);
     }
 } // task_blink_led
-// * * * * * * * * 
 
-// * * * *  *
-static void write_config_file(void) {
-    FILE *f = fopen(CONFIG_FILE, "w");
-    if (f == NULL) {
-        ESP_LOGE(TAG, "Failed to open file for writing");
-        return;
-    }
-    fprintf(f, "brightness=%d\nduration=%d\n", brightness, current_duration ); //    fprintf(f, "max_time=%" PRIu32 "\nremain_time=%" PRIu32 "\n", max_time, remain_time);
-    fprintf(f, "red=%d\ngreen=%d\nblue=%d\n", custom_color.red, custom_color.green, custom_color.blue);
-    ESP_LOGI(TAG, "Config written:\n brightness=%d\nduration=%d\n", brightness, current_duration);
-	fprintf(f, "lamp_state=%d\n",(int)lamp_state);
-    fclose(f);
-} // write_config_file
+static void init_led(){
+    gpio_reset_pin(LED_PIN);
+    gpio_set_direction( LED_PIN, GPIO_MODE_OUTPUT);
+	led_state = 0;
+    xTaskCreate(&task_blink_led, "BlinkLed",  4096, NULL, 5, NULL);
+} // init_led
 
-static void read_config_file(void) {
-	ESP_LOGI(TAG, "read_config_file");
-    FILE *f = fopen(CONFIG_FILE, "r");
-    if (f == NULL) {
-        ESP_LOGW(TAG, "File not found, using defaults");
-        current_duration = 5;
-        brightness = 3;
-        write_config_file();  // Создаём файл с дефолтами
-        return;
-    }
-
-    char line[64];
-
-    while (fgets(line, sizeof(line), f)) {
-		int tmp;
-        if (sscanf(line, "brightness=%d", &brightness) == 1) {                       // if (sscanf(line, "max_time=%" SCNu32, &max_time) == 1) {
-            ESP_LOGI(TAG, "Read brightness=%d", brightness);                         //     ESP_LOGI(TAG, "Read max_time=%" PRIu32, max_time);
-        } else if (sscanf(line, "duration=%d", &current_duration) == 1) {
-            ESP_LOGI(TAG, "Read current_duration=%d", current_duration);
-        } else if (sscanf(line, "lamp_state=%d", &tmp) == 1) {
-			lamp_state = (LAMP_state_t)tmp;
-            ESP_LOGI(TAG, "Read lamp_state=%d", lamp_state);
-        }
-    } // while
-    fclose(f);
-} // read_config_file
+// * * * * *
 
 //  / * / * / *
 void task_counter(void *arg) {
@@ -334,6 +164,8 @@ void init_spiffs() {
 
 static void initi_web_page_buffer(void)
 {
+	ESP_LOGI(TAG, "=== === === ===  initi_web_page_buffer ... ... ... ...\n");
+
     memset((void *)index_html, 0, sizeof(index_html));
     struct stat st;
     if (stat(INDEX_HTML_PATH, &st))
@@ -346,6 +178,14 @@ static void initi_web_page_buffer(void)
     if (fread(index_html, st.st_size, 1, fp) == 0)
     {
         ESP_LOGE(TAG, "fread failed");
+		return;
+	} else { 
+		if (st.st_size >= sizeof(index_html)) {
+			ESP_LOGE(TAG, "index.html too large (%ld bytes), buffer is %d", st.st_size, sizeof(index_html));
+			return;
+        } else {
+           ESP_LOGI(TAG, "Loaded start.html, size: %ld", st.st_size);
+		};
     }
     fclose(fp);
 // CSS ----
@@ -391,7 +231,7 @@ static void initi_web_page_buffer(void)
         ESP_LOGE(TAG, "fread failed for script.js");
     } else {
         script_js[js_size] = '\0';
-        ESP_LOGI(TAG, "Loaded script.js, size: %d", js_size);
+        ESP_LOGI(TAG, "Loaded script.js,  size: %d", js_size);
     }
     fclose(fp);
 
@@ -470,16 +310,20 @@ static void ws_async_send(void *arg)
     httpd_handle_t hd = resp_arg->hd;
 //    int fd = resp_arg->fd;
 
-    char buffer[256];
-    snprintf(buffer, sizeof(buffer), "{\"timer\": %d, \"red\": %d }", total_seconds, custom_color.red );
+    char buffer[128];
+
+	int len = lamp_settings_json(buffer, sizeof(buffer));
+    if (len < 0 || len >= sizeof(buffer)) {
+        ESP_LOGE(TAG, "Failed to format JSON or buffer too small");
+        return;
+    }
     ESP_LOGI(TAG, "msg: %s", buffer);
-    
     
     memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
     ws_pkt.payload = (uint8_t *)buffer;
-    ws_pkt.len = strlen(buffer);
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-    
+    ws_pkt.len     = len;
+    ws_pkt.type    = HTTPD_WS_TYPE_TEXT;
+
     static size_t max_clients = CONFIG_LWIP_MAX_LISTENING_TCP;
     size_t fds = max_clients;
     int client_fds[max_clients];
@@ -575,75 +419,9 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 
 				if ( cmdStart  ) {
 					monitor_wifi_status();
-					cJSON *duration_item = cJSON_GetObjectItem(json, "duration");
-					int duration = 5;
-
-					if (duration_item != NULL) {
-						if (cJSON_IsNumber(duration_item)) {
-							int duration = duration_item->valueint * 60; // minutes to seconds
-							current_duration = duration;
-						} else {
-							const char *dstr = duration_item->valuestring;
-							ESP_LOGE("JSON", "Duration is not a number> %s", dstr);
-						}
-					} else {
-						ESP_LOGE("JSON", "Duration item not found in JSON");
-					}
-
-					const cJSON *mode_item = cJSON_GetObjectItem(json, "mode");
-					if (mode_item != NULL && mode_item->type == cJSON_String) {
-						const char *mode = mode_item->valuestring;
-						if (strcmp(mode, "white") == 0) {
-							lamp_state = white;   ESP_LOGI("start>", "white");
-						} else if (strcmp(mode, "custom") == 0) {
-							lamp_state = custom;  ESP_LOGI("start>", "custom");
-						} else if (strcmp(mode, "rainbow") == 0) {
-							lamp_state = rainbow; ESP_LOGI("start>", "rainbow"); 
-						} else {
-							ESP_LOGE("start>", "unknown mode");
-						}
-					} else {
-					};
-
-					const cJSON *red_item = cJSON_GetObjectItem(json, "red");
-					if (red_item != NULL ) {
-						if (cJSON_IsNumber(red_item)) {
-						  custom_color.red = red_item->valueint;
-						} else {
-							const char *r_str = red_item->valuestring;
-							ESP_LOGE("JSON", "red is not a number> %s", r_str);
-							custom_color.red = 0;
-						};
-					} else {
-					};
-
-					const cJSON *green_item = cJSON_GetObjectItem(json, "green");
-					if (green_item != NULL ) {
-						if (cJSON_IsNumber(green_item)) {
-						  custom_color.green = green_item->valueint;
-						} else {
-							custom_color.green = 0;
-						};
-					} else {
-					};
-
-					const cJSON *blue_item = cJSON_GetObjectItem(json, "blue");
-					if (blue_item != NULL ) {
-						if (cJSON_IsNumber(blue_item)) {
-						  custom_color.blue = blue_item->valueint;
-						} else {
-							custom_color.green = 0;
-						};
-					} else {
-					};
-
-					const char *dsBR = cJSON_GetObjectItem(json, "brightness")->valuestring;
-                    brightness = atoi(dsBR);
-					write_config_file();
-					LAMP_turn_On();
-
-					ESP_LOGI(TAG, "start brightness: %d <duration> %d", brightness, duration);
+					lamp_settings_from_json(json);
 				}; // cmdStart
+
 				if ( cmdStop ) {
 					LAMP_turn_Off();
 				}
@@ -659,7 +437,6 @@ esp_err_t not_found_handler(httpd_req_t *req) {
     httpd_resp_send_404(req);
     return ESP_OK;
 }
-
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
@@ -775,14 +552,21 @@ void wifi_init_softap(void)
     ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20)); // ??
     ESP_ERROR_CHECK(esp_wifi_start());
 
-
+/*
+    esp_netif_ip_info_t ip_info;
+    IP4_ADDR(&ip_info.ip, 192, 168, 4, 1);
+    IP4_ADDR(&ip_info.gw, 192, 168, 4, 1);
+    IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
+    esp_netif_dhcps_stop(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"));
+    esp_netif_set_ip_info(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"), &ip_info);
+    esp_netif_dhcps_start(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"));
+*/
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
              EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 }
 // ***************
 void app_main()
 {
-	ESP_LOGI(TAG, "... ... ... ... MAIN ... ... ... ...\n");
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
@@ -792,12 +576,7 @@ void app_main()
     ESP_ERROR_CHECK(ret);
     init_spiffs();
 
-    total_seconds = 0;
-
     init_led();
-	initWS2812();
-
-    xTaskCreate(&task_blink_led, "BlinkLed",  4096, NULL, 5, NULL);
 	xTaskCreate(&task_counter,   "countdown", 4096, NULL, 5, NULL);
 
 
@@ -815,6 +594,7 @@ void app_main()
     gpio_install_isr_service(0);
     gpio_isr_handler_add(BTN_1, touch_isr_handler, NULL);
 
+	ESP_LOGI(TAG, "--- -- -- --  btn ... ... ... ...\n");
     button_queue = xQueueCreate(10, 0);
     xTaskCreate(touch_task, "touch_task", 2048, NULL, 10, NULL);
 
@@ -823,10 +603,8 @@ void app_main()
 
 	ESP_LOGI(TAG, "ESP32 ESP-IDF WebSocket Web Server is running ... ...\n");
 	initi_web_page_buffer();
+	ESP_LOGI(TAG, "+++ +++ +++ +++  setup_websocket_server ... ... ... ...\n");
 	setup_websocket_server();
-	read_config_file();
-	
-	fade_in_warm_white( brightness );
-    vTaskDelay( 200 );
-	offAllLED();
+
+    LAMP_init();
 } // main
