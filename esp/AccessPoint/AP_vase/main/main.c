@@ -30,15 +30,20 @@
 
 #include "lamp.h"
 
-#define BTN_1 GPIO_NUM_6  // TTP223 SIG на GPIO6
+#define BTN_1 GPIO_NUM_6  //  SIG на GPIO6
 
 #define LED_PIN 8
 #define led_on  0
 #define led_off 1
 
 static QueueHandle_t button_queue;  // +++ Очередь для прерываний
+typedef enum {
+    EVENT_BUTTON_1,   // Событие от TTP223_1
+    EVENT_BUTTON_2    // Событие от TTP223_2
+} button_event_t;
 
-#define EXAMPLE_ESP_WIFI_SSID      "vase" // CONFIG_ESP_WIFI_SSID
+
+#define EXAMPLE_ESP_WIFI_SSID      "vase_1" // CONFIG_ESP_WIFI_SSID
 #define EXAMPLE_ESP_WIFI_PASS      "vase23456" // CONFIG_ESP_WIFI_PASSWORD
 #define EXAMPLE_ESP_WIFI_CHANNEL   6 // CONFIG_ESP_WIFI_CHANNEL
 #define EXAMPLE_MAX_STA_CONN       3 // CONFIG_ESP_MAX_STA_CONN
@@ -50,6 +55,10 @@ struct async_resp_arg {
 };
 
 static const char *TAG = "AP vase";
+
+
+static char wifi_ssid[32] = {0};
+static char wifi_password[64] = {0};
 
 static int led_state = 0;
 
@@ -86,6 +95,7 @@ static void IRAM_ATTR touch_isr_handler(void* arg) {
 
 // Задача для обработки касаний
 static void touch_task(void* arg) {
+//    button_event_t event;
     uint32_t btn;
 //    static uint64_t last_time_on = 0;   // Для debounce TTP223
 //    static uint64_t last_time_off = 0;  // Для debounce кнопки OFF
@@ -95,15 +105,23 @@ static void touch_task(void* arg) {
         if (xQueueReceive(button_queue, &btn, portMAX_DELAY)) {
 //            uint64_t current_time = esp_timer_get_time();
 
-//            if (btn == BTN_1) {
-            ESP_LOGI(TAG, "Touch detected");
+            if (btn == BTN_1) {
+//            switch (event) {
+//                case EVENT_BUTTON_1:
+//                    break;
+//                default:
+//                    ESP_LOGW(TAG, "Неизвестное событие: %d", event);
+//                    break;
+//            }; // switch 
+              ESP_LOGI(TAG, "Touch detected");
 //            start_rainbow();
-            if (!LAMP_on) {
-              LAMP_turn_On();
-            } else {
-			  offAllLED();
-              LAMP_on = false;
-            } // if LAMP_on
+              if (!LAMP_on) {
+                LAMP_turn_On();
+              } else {
+		  	    offAllLED();
+                LAMP_on = false;
+              } // if LAMP_on
+            };
         } // if
     } // while
 }
@@ -507,6 +525,34 @@ void set_wifi_tx_power() {
     esp_wifi_set_max_tx_power(max_tx_power);
 }
 // --
+esp_err_t read_wifi_config_from_file(void) {
+    ESP_LOGI(TAG, "Reading WiFi configuration from SPIFFS");
+//    strlcpy(wifi_ssid, EXAMPLE_ESP_WIFI_SSID, sizeof(wifi_ssid));
+
+    FILE* file = fopen("/spiffs/wifi.cfg", "r");
+    if (file == NULL) {
+        ESP_LOGE(TAG, "Failed to open wifi_config.txt, using default values");
+        return ESP_FAIL;
+    }
+
+    char temp_ssid[32] = {0};
+    char temp_password[64] = {0};
+
+    if (fgets(temp_ssid, sizeof(temp_ssid), file) == NULL) {
+        ESP_LOGE(TAG, "Failed to read SSID");
+        fclose(file);
+        return ESP_FAIL;
+    }
+    temp_ssid[strcspn(temp_ssid, "\n")] = 0;
+
+    fclose(file);
+	strcpy(wifi_ssid, temp_ssid);
+
+    ESP_LOGI(TAG, "Read SSID: %s", wifi_ssid);
+    ESP_LOGI(TAG, "Read Password: [hidden]");
+    return ESP_OK;
+}
+// --
 void wifi_init_softap(void)
 {
 	set_wifi_tx_power();
@@ -525,8 +571,9 @@ void wifi_init_softap(void)
 
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
+//            .ssid = EXAMPLE_ESP_WIFI_SSID,
+//            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
+            .ssid_len = strlen(wifi_ssid),
             .channel = EXAMPLE_ESP_WIFI_CHANNEL,
             .password = EXAMPLE_ESP_WIFI_PASS,
             .max_connection = EXAMPLE_MAX_STA_CONN,
@@ -537,12 +584,19 @@ void wifi_init_softap(void)
 #else /* CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT */
 //            .authmode = WIFI_AUTH_WPA2_PSK,
 #endif
-
+/*
+    if (strlen(wifi_password) == 0) {
+        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+    } else {
+        wifi_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    }
+*/
             .pmf_cfg = {
                     .required = true,
             },
         },
-    };
+    }; // wifi_config_t 
+	strncpy((char*)wifi_config.ap.ssid, wifi_ssid, sizeof(wifi_config.ap.ssid));
     if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
     }
@@ -562,7 +616,7 @@ void wifi_init_softap(void)
     esp_netif_dhcps_start(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"));
 */
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
+             wifi_ssid/*EXAMPLE_ESP_WIFI_SSID*/, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 }
 // ***************
 void app_main()
@@ -595,10 +649,21 @@ void app_main()
     gpio_isr_handler_add(BTN_1, touch_isr_handler, NULL);
 
 	ESP_LOGI(TAG, "--- -- -- --  btn ... ... ... ...\n");
-    button_queue = xQueueCreate(10, 0);
+//    button_queue = xQueueCreate(10, 0); // Создание очереди (10 элементов, каждый — button_event_t)
+    button_queue = xQueueCreate(10, sizeof(button_event_t));
+    if (button_queue == NULL) {
+        ESP_LOGE(TAG, "Ошибка создания очереди!");
+        return;
+    }
+
     xTaskCreate(touch_task, "touch_task", 2048, NULL, 10, NULL);
 
+
     ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
+    if (read_wifi_config_from_file() != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to read WiFi configuration!");
+        return;
+    }
     wifi_init_softap();
 
 	ESP_LOGI(TAG, "ESP32 ESP-IDF WebSocket Web Server is running ... ...\n");
