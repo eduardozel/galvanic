@@ -112,3 +112,15 @@
             font-size: 16px;
 			margin-right: 5px;
 		}
+
+		#red {
+		  background-color: #ffcccc;
+		}
+
+		#green {
+		  background-color: #ccffcc;
+		}
+
+		#blue {
+		  background-color: #ccccff;
+		}
