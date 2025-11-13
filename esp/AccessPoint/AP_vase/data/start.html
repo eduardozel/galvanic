@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>Vase Server v 1.03</title>
+    <title>Vase Server v 1.04</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" href="data:,">
 	<link rel="stylesheet" href="styles.css">
@@ -10,7 +10,7 @@
 
 <body>
     <div class="topnav">
-        <h1>Vase Server v 1.0.3</h1>
+        <h1>Vase Server v 1.0.4</h1>
     </div>
 	<table>
 <table border='1' align="center">
@@ -34,13 +34,14 @@
 	</select>
     <select id="mn" class = "clock">
         <option value= "0">00</option>
+        <option value="5"> 5</option>
         <option value="15">15</option>
         <option value="30">30</option>
         <option value="45">45</option>
 	</select>
 </td>
 </tr>
-<tr>
+<tr style='display:none' id="brightnesstr">
 <td>
     <select id="brightness" class = "clock">
         <option value= "1"> 1</option>
@@ -64,7 +65,7 @@
 <tr>
 <td>
     <select id="mode" class = "clock">
-        <option value="white">white</option>
+        <option value="white" selected>white</option>
         <option value="rainbow">rainbow</option>
         <option value="custom">custom</option>
     </select>

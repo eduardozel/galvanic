@@ -98,6 +98,8 @@ showStatusMessage("onLoad");
 			if (blueInput) {
 				blueInput.addEventListener('input', ()  => { blueChanged  = true; });
 			} // if (blueInput)
+				
+			toggleColors();
 		} // onLoad
 
         function getState() {
@@ -155,7 +157,7 @@ showStatusMessage("onLoad");
 		
 		function toggleColors() {
             var modeSelect = document.getElementById('mode');
-            var customRow = document.getElementById('colors');
+            var customRow  = document.getElementById('colors');
 
 /*
     if (modeSelect && customRow) {
@@ -165,8 +167,10 @@ showStatusMessage("onLoad");
 
 			if (modeSelect.value === 'custom') {
 				colors.style.display = '';  // Показать (сброс display к дефолтному)
+				brightnesstr.style.display = 'none';
 			} else {
 				colors.style.display = 'none';
+				brightnesstr.style.display = '';
 			}
     } // toggleColors
 
