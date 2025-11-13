@@ -13,7 +13,7 @@
 #include "lamp.h"
 
 
-#define CONFIG_FILE     "/spiffs/config.txt"
+#define CONFIG_FILE     "/spiffs/light.cfg"
 
 static const char *TAG = "LAMP";
 
@@ -92,7 +92,7 @@ void rainbow_task(void *arg) {
             direction = 1;
         }
 
-        vTaskDelay(pdMS_TO_TICKS( 400));
+        vTaskDelay(pdMS_TO_TICKS( 1500));
     }
     vTaskDelete(NULL);
 } // rainbow_task
@@ -125,7 +125,7 @@ void LAMP_turn_On(void){
 	  ESP_LOGI(TAG, "rainbow");
 	  start_rainbow();
 	} else {
-	  ESP_LOGE(TAG, "uncnown lamp_state");
+	  ESP_LOGE(TAG, "unknown lamp_state");
 	};
 	LAMP_on = true;
 }; // LAMPon
@@ -167,6 +167,13 @@ void read_config_file(void) {
 		int tmp;
         if (sscanf(line, "brightness=%d", &brightness) == 1) {                       // if (sscanf(line, "max_time=%" SCNu32, &max_time) == 1) {
             ESP_LOGI(TAG, "Read brightness=%d", brightness);                         //     ESP_LOGI(TAG, "Read max_time=%" PRIu32, max_time);
+
+        } else if (sscanf(line, "red=%hhu", &custom_color.red) == 1) {
+            ESP_LOGI(TAG, "Read red=%d", custom_color.red);
+        } else if (sscanf(line, "green=%hhu", &custom_color.green) == 1) {
+            ESP_LOGI(TAG, "Read green=%d", custom_color.green);
+        } else if (sscanf(line, "blue=%hhu", &custom_color.blue) == 1) {
+            ESP_LOGI(TAG, "Read blue=%d", custom_color.blue);
         } else if (sscanf(line, "duration=%d", &current_duration) == 1) {
             ESP_LOGI(TAG, "Read current_duration=%d", current_duration);
         } else if (sscanf(line, "lamp_state=%d", &tmp) == 1) {

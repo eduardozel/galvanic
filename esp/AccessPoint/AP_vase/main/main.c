@@ -45,7 +45,7 @@ typedef enum {
 
 #define EXAMPLE_ESP_WIFI_SSID      "vase_1" // CONFIG_ESP_WIFI_SSID
 #define EXAMPLE_ESP_WIFI_PASS      "vase23456" // CONFIG_ESP_WIFI_PASSWORD
-#define EXAMPLE_ESP_WIFI_CHANNEL   6 // CONFIG_ESP_WIFI_CHANNEL
+#define EXAMPLE_ESP_WIFI_CHANNEL   6 // CONFIG_ESP_WIFI_CHANNEL 1 6 11
 #define EXAMPLE_MAX_STA_CONN       3 // CONFIG_ESP_MAX_STA_CONN
 
 httpd_handle_t server = NULL;
@@ -57,7 +57,7 @@ struct async_resp_arg {
 static const char *TAG = "AP vase";
 
 
-static char wifi_ssid[32] = {0};
+static char wifi_ssid[32]     = {0};
 static char wifi_password[64] = {0};
 
 static int led_state = 0;
@@ -118,8 +118,7 @@ static void touch_task(void* arg) {
               if (!LAMP_on) {
                 LAMP_turn_On();
               } else {
-		  	    offAllLED();
-                LAMP_on = false;
+				LAMP_turn_Off();
               } // if LAMP_on
             };
         } // if
@@ -544,14 +543,23 @@ esp_err_t read_wifi_config_from_file(void) {
         return ESP_FAIL;
     }
     temp_ssid[strcspn(temp_ssid, "\n")] = 0;
-
-    fclose(file);
-	strcpy(wifi_ssid, temp_ssid);
-
+	strcpy(wifi_ssid,     temp_ssid);
     ESP_LOGI(TAG, "Read SSID: %s", wifi_ssid);
-    ESP_LOGI(TAG, "Read Password: [hidden]");
+
+/*	
+    if (fgets(temp_password, sizeof(temp_password), file) == NULL) {
+        ESP_LOGE(TAG, "Failed to read password");
+        fclose(file);
+        return ESP_FAIL;
+    }
+    temp_password[strcspn(temp_password, "\n")] = 0;
+	strcpy(wifi_password, temp_password);
+    ESP_LOGI(TAG, "Read Password: %s", wifi_password);
+
+*/
+    fclose(file);
     return ESP_OK;
-}
+} // read_wifi_config_from_file
 // --
 void wifi_init_softap(void)
 {
