@@ -13,9 +13,14 @@
 #include "lamp.h"
 
 
-#define CONFIG_FILE     "/spiffs/light.cfg"
+#define CONFIG_FILE     "/spiffs/lamp.cfg"
 
 static const char *TAG = "LAMP";
+
+
+static int led_states_count = 0;
+static const char* sequence_filename = "/spiffs/led_sequence.cfg";
+
 
 /*
 static const char *lamp_state_to_str(LAMP_state_t s)
@@ -81,7 +86,7 @@ void rainbow_task(void *arg) {
     while (rainbow_active) {
         // Calculate RGB from HSV (S=1, V=1 max brightness)
         rgb_t color = hsv2rgb(hue, 1.0f, 1.0f);
-        setAllLED(color );
+        setAllLED( color );
 
         hue += direction * step;
         if (hue >= 360.0f) {
@@ -157,7 +162,7 @@ void read_config_file(void) {
         ESP_LOGW(TAG, "File not found, using defaults");
         current_duration = 5;
         brightness = 3;
-        write_config_file();  // Создаём файл с дефолтами
+        write_config_file();
         return;
     }
 
@@ -215,7 +220,6 @@ void lamp_settings_from_json(cJSON *json) {
         ESP_LOGE(TAG, "Duration item not found in JSON");
     }
 
-    // Обработка режима работы лампы
     cJSON *mode_item = cJSON_GetObjectItem(json, "mode");
     if (mode_item != NULL && mode_item->type == cJSON_String) {
         const char *mode = mode_item->valuestring;
@@ -259,11 +263,113 @@ int lamp_settings_json(char *buffer, size_t size) {
                     custom_color.blue, brightness, lamp_state);
 } // lamp_settings_json
 
+static void free_led_states(void) {
+    if (led_states) {
+        free(led_states);
+        led_states = NULL;
+    }
+    led_states_count = 0;
+} // free_led_states
+
+bool load_led_states_from_cfg(void) {
+    free_led_states();
+
+    FILE *f = fopen(sequence_filename, "r");
+    if (!f) {
+        ESP_LOGE(TAG, "Failed to open sequence file: %s", sequence_filename);
+        return false;
+    }
+
+    if (fscanf(f, "%d\n", &led_states_count) != 1) {
+        ESP_LOGE(TAG, "Failed to read states count");
+        fclose(f);
+        return false;
+    }
+
+    if (led_states_count <= 0) {
+        ESP_LOGE(TAG, "Invalid states count: %d", led_states_count);
+        fclose(f);
+        return false;
+    }
+
+    led_states = malloc(sizeof(led_state_t) * led_states_count);
+    if (!led_states) {
+        ESP_LOGE(TAG, "Failed to allocate led_states");
+        fclose(f);
+        return false;
+    }
+
+    char linebuf[2048];
+
+    for (int i = 0; i < led_states_count; i++) {
+        if (!fgets(linebuf, sizeof(linebuf), f)) {
+            ESP_LOGE(TAG, "Unexpected EOF reading state %d", i);
+            free_led_states();
+            fclose(f);
+            return false;
+        }
+
+        // Parsing color
+        //  duration_sec, {R,G,B}, {R,G,B}, ..., {R,G,B}
+        // 5, {255,0,0}, {0,255,0}, ..., {255,255,255}
+
+        char *p = linebuf;
+        int duration_sec = 0;
+
+        int n = 0;
+        if (sscanf(p, "%d%n", &duration_sec, &n) != 1) {
+            ESP_LOGE(TAG, "Failed to read duration in line %d", i);
+            free_led_states();
+            fclose(f);
+            return false;
+        }
+        p += n;
+
+        while (*p == ' ' || *p == ',') p++;
+
+        led_states[i].duration_sec = duration_sec;
+
+        for (int led_i = 0; led_i < LED_COUNT; led_i++) {
+            int r, g, b;
+
+            if (sscanf(p, "{%d,%d,%d}", &r, &g, &b) != 3) {
+                ESP_LOGE(TAG, "Parsing color %d failed on line %d", led_i, i);
+                free_led_states();
+                fclose(f);
+                return false;
+            }
+
+            led_states[i].leds[led_i].red   = (uint8_t)r;
+            led_states[i].leds[led_i].green = (uint8_t)g;
+            led_states[i].leds[led_i].blue  = (uint8_t)b;
+
+            char *brace_end = strchr(p, '}');
+            if (!brace_end) {
+                ESP_LOGE(TAG, "Malformed color %d on line %d", led_i, i);
+                free_led_states();
+                fclose(f);
+                return false;
+            }
+            p = brace_end + 1;
+            while (*p == ' ' || *p == ',') p++;
+        }
+    }
+
+    fclose(f);
+
+    ESP_LOGI(TAG, "Loaded %d led states from text file", led_states_count);
+    return true;
+} // load_led_states_from_cfg
+
+// - - - - -
 void LAMP_init(void){
     total_seconds = 0;
 	read_config_file();
+	load_led_states_from_cfg();
 	initWS2812();
-	fade_in_warm_white( brightness );
+//	fade_in_warm_white( brightness );
+    led_state_t *state = &led_states[0];
+    setLEDsArray(state->leds, LED_COUNT);
     vTaskDelay( 200 );
 	offAllLED();
 }; // LAMP_init

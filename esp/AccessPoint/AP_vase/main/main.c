@@ -60,6 +60,11 @@ static const char *TAG = "AP vase";
 static char wifi_ssid[32]     = {0};
 static char wifi_password[64] = {0};
 
+typedef struct {
+    uint8_t ssid[32];
+    uint8_t password[64];
+} wifi_ap_cfg_t;
+
 static int led_state = 0;
 
 static const int tick = 10;
@@ -501,7 +506,7 @@ httpd_handle_t setup_websocket_server(void)
 	};
 
 	httpd_uri_t not_found_uri = {
-		.uri = "/*",  // Для всех URI
+		.uri = "/*",
 		.method = HTTP_GET,
 		.handler = not_found_handler,
 		.user_ctx = NULL
@@ -535,28 +540,26 @@ esp_err_t read_wifi_config_from_file(void) {
     }
 
     char temp_ssid[32] = {0};
-    char temp_password[64] = {0};
 
     if (fgets(temp_ssid, sizeof(temp_ssid), file) == NULL) {
         ESP_LOGE(TAG, "Failed to read SSID");
         fclose(file);
         return ESP_FAIL;
     }
-    temp_ssid[strcspn(temp_ssid, "\n")] = 0;
+    temp_ssid[strcspn(temp_ssid, "\r")] = 0;
 	strcpy(wifi_ssid,     temp_ssid);
-    ESP_LOGI(TAG, "Read SSID: %s", wifi_ssid);
+    ESP_LOGI(TAG, "Read SSID: %s<<!!!", wifi_ssid);
 
-/*	
+    char temp_password[64] = {0};
     if (fgets(temp_password, sizeof(temp_password), file) == NULL) {
         ESP_LOGE(TAG, "Failed to read password");
         fclose(file);
         return ESP_FAIL;
     }
-    temp_password[strcspn(temp_password, "\n")] = 0;
+    temp_password[strcspn(temp_password, "\r")] = 0;
 	strcpy(wifi_password, temp_password);
-    ESP_LOGI(TAG, "Read Password: %s", wifi_password);
+    ESP_LOGI(TAG, "Read Password: %s<<!!!", wifi_password);
 
-*/
     fclose(file);
     return ESP_OK;
 } // read_wifi_config_from_file
@@ -583,14 +586,15 @@ void wifi_init_softap(void)
 //            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
             .ssid_len = strlen(wifi_ssid),
             .channel = EXAMPLE_ESP_WIFI_CHANNEL,
-            .password = EXAMPLE_ESP_WIFI_PASS,
+//            .password = EXAMPLE_ESP_WIFI_PASS,
+            .password = "",
             .max_connection = EXAMPLE_MAX_STA_CONN,
 
 #ifdef CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
-//            .authmode = WIFI_AUTH_WPA3_PSK,
-//            .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
-#else /* CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT */
-//            .authmode = WIFI_AUTH_WPA2_PSK,
+            .authmode = WIFI_AUTH_WPA3_PSK,
+            .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
+#else  CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
+            .authmode = WIFI_AUTH_WPA2_PSK,
 #endif
 /*
     if (strlen(wifi_password) == 0) {
@@ -608,6 +612,10 @@ void wifi_init_softap(void)
     if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
     }
+	strlcpy((char*)wifi_config.ap.password, wifi_password, sizeof(wifi_config.ap.password));
+
+ESP_LOGI(TAG, "wifi_init_softap ??????? SSID:%s<>password:%s<>channel:%d",
+             wifi_config.ap.ssid, wifi_config.ap.password, EXAMPLE_ESP_WIFI_CHANNEL);
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
@@ -624,7 +632,7 @@ void wifi_init_softap(void)
     esp_netif_dhcps_start(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"));
 */
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             wifi_ssid/*EXAMPLE_ESP_WIFI_SSID*/, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
+             wifi_ssid/*EXAMPLE_ESP_WIFI_SSID*/, wifi_password, EXAMPLE_ESP_WIFI_CHANNEL);
 }
 // ***************
 void app_main()
@@ -653,17 +661,28 @@ void app_main()
     io_conf.intr_type = GPIO_INTR_POSEDGE;  // Rising edge
     io_conf.pull_down_en = 1;               // Pull-down для стабильности
     gpio_config(&io_conf);
+
+
+    vTaskDelay(pdMS_TO_TICKS(10));
+    int button_state = gpio_get_level(BTN_1);
+    if (button_state == 1) {
+      ESP_LOGI(TAG, "+++ ++ ++ ++  btn ... ... ... ...\n");
+    } else {
+      ESP_LOGI(TAG, "--- -- -- --  btn ... ... ... ...\n");
+	};
+
+
     gpio_install_isr_service(0);
     gpio_isr_handler_add(BTN_1, touch_isr_handler, NULL);
 
-	ESP_LOGI(TAG, "--- -- -- --  btn ... ... ... ...\n");
+	ESP_LOGI(TAG, "              btn ... handler ... ...\n");
+	
 //    button_queue = xQueueCreate(10, 0); // Создание очереди (10 элементов, каждый — button_event_t)
     button_queue = xQueueCreate(10, sizeof(button_event_t));
     if (button_queue == NULL) {
         ESP_LOGE(TAG, "Ошибка создания очереди!");
         return;
     }
-
     xTaskCreate(touch_task, "touch_task", 2048, NULL, 10, NULL);
 
 

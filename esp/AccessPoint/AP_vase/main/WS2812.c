@@ -15,7 +15,7 @@
 #define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 #define RMT_LED_STRIP_GPIO_NUM      5
 
-#define RING_LED_NUMBERS            16
+#define RING_LED_NUMBERS            32 // 16
 #define EXAMPLE_CHASE_SPEED_MS      10
 
 
@@ -34,6 +34,7 @@ static int brightness = 4;
 
 static uint8_t led_strip_pixels[RING_LED_NUMBERS * 3];
 
+led_state_t *led_states = NULL;
 
     rmt_channel_handle_t       led_chan;
     rmt_tx_channel_config_t    tx_chan_config;
@@ -171,11 +172,33 @@ void setAllLED_rgb( uint32_t red, uint32_t green, uint32_t blue )
 	}
 	ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
     ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
-} // setAllLED
+} // setAllLED_rgb
 
 void setAllLED( rgb_t color ){
   setAllLED_rgb( color.red, color.green, color.blue );
 };// setAllLED
+
+void setLEDsArray(rgb_t *led_array, size_t count)
+{
+    if (count > RING_LED_NUMBERS) {
+        count = RING_LED_NUMBERS;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        led_strip_pixels[i * 3 + 0] = led_array[i].green;
+        led_strip_pixels[i * 3 + 1] = led_array[i].red;
+        led_strip_pixels[i * 3 + 2] = led_array[i].blue;
+    }
+
+    for (size_t i = count; i < RING_LED_NUMBERS; i++) {
+        led_strip_pixels[i * 3 + 0] = 0;
+        led_strip_pixels[i * 3 + 1] = 0;
+        led_strip_pixels[i * 3 + 2] = 0;
+    }
+
+    ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
+    ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+} // setLEDsArray
 
 void fade_in_warm_white( int max )
 {
@@ -186,7 +209,9 @@ void fade_in_warm_white( int max )
 	  vTaskDelay(500 / portTICK_PERIOD_MS);
     }
 
-}
+} // fade_in_warm_white
+
+
 //set_warm_white(); 
 // Теплый белый: GRB = 210, 255, 150
 /*
