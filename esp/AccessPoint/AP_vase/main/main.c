@@ -75,7 +75,7 @@ static const int tick = 10;
 
 static char index_html[4096];
 static char style_css[4096];
-static char script_js[4096+2048]; 
+static char script_js[4096+4096]; 
 
 //static char response_data[8192+4096];
 /***********************/
@@ -152,11 +152,13 @@ static void init_led(){
 //  / * / * / *
 void task_counter(void *arg) {
     while (1) {
+//      if ( total_seconds > 0 ) {
 		if        ( total_seconds   > tick ) { total_seconds -= tick;
 		} else if ( total_seconds  == tick ) { LAMP_turn_Off();
 		}
+//      } // if 
 		vTaskDelay( 10000 / portTICK_PERIOD_MS);
-    }
+    } // while
 } // task_counter
 
 void init_spiffs() {
@@ -307,7 +309,50 @@ static esp_err_t get_req_handler(httpd_req_t *req) {
     httpd_resp_send(req, index_html, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
+/* * * * * */
 
+// Add this new handler function
+static esp_err_t upload_handler(httpd_req_t *req) {
+    char buf[1024];
+    esp_err_t ret;
+    size_t remaining = req->content_len;
+
+    FILE *fd = fopen("/spiffs/led_sequence.cfg", "w");
+    if (fd == NULL) {
+        ESP_LOGE(TAG, "Failed to open file for writing");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    while (remaining > 0) {
+        size_t buf_len = sizeof(buf) < remaining ? sizeof(buf) : remaining;
+        ret = httpd_req_recv(req, buf, buf_len);
+        if (ret <= 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+                continue;
+            }
+            fclose(fd);
+            ESP_LOGE(TAG, "File receive failed");
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+        if (fwrite(buf, 1, ret, fd) != ret) {
+            fclose(fd);
+            ESP_LOGE(TAG, "File write failed");
+            httpd_resp_send_500(req);
+            return ESP_FAIL;
+        }
+        remaining -= ret;
+    }
+
+    fclose(fd);
+    ESP_LOGI(TAG, "File uploaded and saved as /spiffs/led_sequence.cfg");
+    const char *resp = "File uploaded successfully";
+    httpd_resp_send(req, resp, strlen(resp));
+    return ESP_OK;
+}
+
+/* - - - - */
 /*
 esp_err_t get_req_handler(httpd_req_t *req)
 {

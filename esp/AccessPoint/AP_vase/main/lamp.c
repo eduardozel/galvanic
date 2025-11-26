@@ -280,17 +280,29 @@ bool load_led_states_from_cfg(void) {
         return false;
     }
 
-    if (fscanf(f, "%d\n", &led_states_count) != 1) {
+    int tmp1 = 0;
+    int tmp2 = 0;
+//    if (fscanf(f, "%d\n", &led_states_count) != 1) {
+	 if (fscanf(f, "%d,%d,%d;", &led_states_count, &tmp1, &tmp2) != 3) {
         ESP_LOGE(TAG, "Failed to read states count");
         fclose(f);
         return false;
     }
+    ESP_LOGI(TAG, "Parsed values: count=%d, tmp1=%d, tmp2=%d", led_states_count, tmp1, tmp2);
 
     if (led_states_count <= 0) {
         ESP_LOGE(TAG, "Invalid states count: %d", led_states_count);
         fclose(f);
         return false;
     }
+    int c;
+    c = fgetc(f); // ESP_LOGI(TAG, "1?%d<>%d", c, '\r');
+    c = fgetc(f); // ESP_LOGI(TAG, "2?%d<>%d", c, '\n');
+/*
+    while ((c = fgetc(f)) != '\n' && c != EOF) {
+    }
+*/
+    ESP_LOGI(TAG, "next line------------------");
 
     led_states = malloc(sizeof(led_state_t) * led_states_count);
     if (!led_states) {
@@ -315,10 +327,12 @@ bool load_led_states_from_cfg(void) {
 
         char *p = linebuf;
         int duration_sec = 0;
+		int tmp1 = 0;
+        int tmp2 = 0;
 
         int n = 0;
-        if (sscanf(p, "%d%n", &duration_sec, &n) != 1) {
-            ESP_LOGE(TAG, "Failed to read duration in line %d", i);
+        if (sscanf(p, "%u%n", &duration_sec, &n) != 1) {
+            ESP_LOGE(TAG, "Failed to read duration in line %d<---->%d<>>>>%s", i, n, p);
             free_led_states();
             fclose(f);
             return false;
@@ -329,10 +343,10 @@ bool load_led_states_from_cfg(void) {
 
         led_states[i].duration_sec = duration_sec;
 
-        for (int led_i = 0; led_i < LED_COUNT; led_i++) {
+        for (int led_i = 0; led_i < LED_COUNT_MAX; led_i++) {
             int r, g, b;
 
-            if (sscanf(p, "{%d,%d,%d}", &r, &g, &b) != 3) {
+            if (sscanf(p, "{%u,%u,%u}", &r, &g, &b) != 3) { // "{%d,%d,%d}"
                 ESP_LOGE(TAG, "Parsing color %d failed on line %d", led_i, i);
                 free_led_states();
                 fclose(f);
@@ -352,8 +366,8 @@ bool load_led_states_from_cfg(void) {
             }
             p = brace_end + 1;
             while (*p == ' ' || *p == ',') p++;
-        }
-    }
+        } //for led_i < LED_COUNT_MAX
+    } // for i < led_states_count
 
     fclose(f);
 
@@ -369,7 +383,7 @@ void LAMP_init(void){
 	initWS2812();
 //	fade_in_warm_white( brightness );
     led_state_t *state = &led_states[0];
-    setLEDsArray(state->leds, LED_COUNT);
+    setLEDsArray(state->leds, LED_COUNT_MAX);
     vTaskDelay( 200 );
 	offAllLED();
 }; // LAMP_init
