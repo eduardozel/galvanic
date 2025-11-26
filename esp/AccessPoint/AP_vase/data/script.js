@@ -110,6 +110,7 @@ showStatusMessage("onLoad");
             document.getElementById('start').addEventListener('click', btn_start);
             document.getElementById('stop').addEventListener('click',  btn_stop);
             document.getElementById('mode').addEventListener('change', toggleColors);
+            document.getElementById('upload').addEventListener('click', btn_upload);
 		} // initButton()
 
         function btn_start() {
@@ -174,3 +175,37 @@ showStatusMessage("onLoad");
 			}
     } // toggleColors
 
+function btn_upload() {
+    var fileInput = document.getElementById('file');
+    var file = fileInput.files[0];
+    if (!file) {
+        showStatusMessage('Please select a file', 3000);
+        return;
+    }
+    if (!file.name.endsWith('.cfg') && !file.name.endsWith('.txt')) {
+        showStatusMessage('Only .cfg or .txt files are allowed', 3000);
+        return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        fetch('/upload', {
+            method: 'POST',
+            body: e.target.result,
+            headers: { 'Content-Type': 'text/plain' }
+        }).then(response => {
+            if (response.ok) {
+                return response.text();
+            } else {
+                throw new Error('Upload failed with status: ' + response.status);
+            }
+        }).then(data => {
+            console.log(data); // "File uploaded successfully"
+            showStatusMessage('Upload successful: ' + data, 5000);
+            fileInput.value = ''; // Очистить поле ввода после успешной загрузки
+        }).catch(error => {
+            console.error('Upload failed:', error);
+            showStatusMessage('Upload failed: ' + error.message, 5000);
+        });
+    };
+    reader.readAsText(file);
+} // btn_upload
