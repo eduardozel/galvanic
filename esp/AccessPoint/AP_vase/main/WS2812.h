@@ -24,6 +24,7 @@ void initWS2812( void );
 void setLEDsArray(rgb_t *led_array, size_t count);
 void setAllLED_rgb( uint32_t red, uint32_t green, uint32_t blue ); // uint8_t
 void setAllLED( rgb_t color );
+void setProfile( int prfl );
 void offAllLED( void );
 void fade_in_warm_white( int max );
 rgb_t hsv2rgb(float h, float s, float v);

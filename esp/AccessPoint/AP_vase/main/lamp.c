@@ -63,7 +63,8 @@ static int lamp_state_from_str(const char *s, LAMP_state_t *out)
 typedef enum {
     white   = 0,
     rainbow = 1,
-    custom  = 2
+    custom  = 2,
+	profile = 3
 } LAMP_state_t;
 
 
@@ -129,6 +130,9 @@ void LAMP_turn_On(void){
 	} else if ( rainbow == lamp_state ) {
 	  ESP_LOGI(TAG, "rainbow");
 	  start_rainbow();
+	} else if ( profile == lamp_state ) {
+	  ESP_LOGI(TAG, "profile");
+	  setProfile(brightness-1);
 	} else {
 	  ESP_LOGE(TAG, "unknown lamp_state");
 	};
@@ -229,6 +233,8 @@ void lamp_settings_from_json(cJSON *json) {
             lamp_state = custom;
         } else if (strcmp(mode, "rainbow") == 0) {
             lamp_state = rainbow;
+        } else if (strcmp(mode, "profile") == 0) {
+            lamp_state = profile;
         } else {
             ESP_LOGE(TAG, "Unknown mode: %s", mode);
         }
@@ -248,7 +254,6 @@ void lamp_settings_from_json(cJSON *json) {
             ESP_LOGE(TAG, "Brightness is not a number or string");
         }
     }
-
     write_config_file();
     LAMP_turn_On();
 
@@ -329,7 +334,7 @@ bool load_led_states_from_cfg(void) {
         int duration_sec = 0;
 		int tmp1 = 0;
         int tmp2 = 0;
-
+//        ESP_LOGI(TAG, ">>>>>>>%s", p);
         int n = 0;
         if (sscanf(p, "%u%n", &duration_sec, &n) != 1) {
             ESP_LOGE(TAG, "Failed to read duration in line %d<---->%d<>>>>%s", i, n, p);
@@ -368,10 +373,19 @@ bool load_led_states_from_cfg(void) {
             while (*p == ' ' || *p == ',') p++;
         } //for led_i < LED_COUNT_MAX
     } // for i < led_states_count
-
     fclose(f);
-
+/*
+    ESP_LOGI(TAG, "++++++++++++++++++++++++++++++++++++++++++++++");
     ESP_LOGI(TAG, "Loaded %d led states from text file", led_states_count);
+    int k = 0;
+    ESP_LOGI(TAG, "%d>>%d rgb> %d %d %d", k, led_states[k].duration_sec, led_states[k].leds[0].red, led_states[k].leds[0].green, led_states[k].leds[0].blue);
+	k++;
+    ESP_LOGI(TAG, "%d>>%d rgb> %d %d %d", k, led_states[k].duration_sec, led_states[k].leds[0].red, led_states[k].leds[0].green, led_states[k].leds[0].blue);
+	k++;
+    ESP_LOGI(TAG, "%d>>%d rgb> %d %d %d", k, led_states[k].duration_sec, led_states[k].leds[0].red, led_states[k].leds[0].green, led_states[k].leds[0].blue);
+	k++;
+    ESP_LOGI(TAG, "%d>>%d rgb> %d %d %d", k, led_states[k].duration_sec, led_states[k].leds[0].red, led_states[k].leds[0].green, led_states[k].leds[0].blue);
+*/
     return true;
 } // load_led_states_from_cfg
 
@@ -382,8 +396,7 @@ void LAMP_init(void){
 	load_led_states_from_cfg();
 	initWS2812();
 //	fade_in_warm_white( brightness );
-    led_state_t *state = &led_states[0];
-    setLEDsArray(state->leds, LED_COUNT_MAX);
+    setProfile(1);
     vTaskDelay( 200 );
 	offAllLED();
 }; // LAMP_init

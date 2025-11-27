@@ -310,8 +310,6 @@ static esp_err_t get_req_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 /* * * * * */
-
-// Add this new handler function
 static esp_err_t upload_handler(httpd_req_t *req) {
     char buf[1024];
     esp_err_t ret;
@@ -557,6 +555,13 @@ httpd_handle_t setup_websocket_server(void)
 		.user_ctx = NULL
 	};
 
+    httpd_uri_t upload_uri = {
+        .uri = "/upload",
+        .method = HTTP_POST,
+        .handler = upload_handler,
+        .user_ctx = NULL
+    };
+
     if (httpd_start(&server, &config) == ESP_OK)
     {
         httpd_register_uri_handler(server, &uri_get);
@@ -564,6 +569,7 @@ httpd_handle_t setup_websocket_server(void)
 		httpd_register_uri_handler(server, &style_uri);
 		httpd_register_uri_handler(server, &js_uri);
 		httpd_register_uri_handler(server, &not_found_uri);
+        httpd_register_uri_handler(server, &upload_uri);
     }
 
     return server;

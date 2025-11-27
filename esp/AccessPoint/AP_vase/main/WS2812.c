@@ -200,6 +200,13 @@ void setLEDsArray(rgb_t *led_array, size_t count)
     ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
 } // setLEDsArray
 
+void setProfile( int prfl )
+{
+//    ESP_LOGI(TAG, "setProfile>>%d",prfl);
+    led_state_t *state = &led_states[prfl];
+    setLEDsArray(state->leds, LED_COUNT_MAX);
+} // setProfile
+
 void fade_in_warm_white( int max )
 {
     brightness = max;
@@ -210,6 +217,7 @@ void fade_in_warm_white( int max )
     }
 
 } // fade_in_warm_white
+
 
 
 //set_warm_white(); 
