@@ -67,9 +67,9 @@
 
 
 
-#define EXAMPLE_ESP_WIFI_SSID      "galvanica" // CONFIG_ESP_WIFI_SSID
-#define EXAMPLE_ESP_WIFI_PASS      "gvc123456" // CONFIG_ESP_WIFI_PASSWORD
-#define EXAMPLE_ESP_WIFI_CHANNEL   5 // CONFIG_ESP_WIFI_CHANNEL
+//#define EXAMPLE_ESP_WIFI_SSID      "galvanica" // CONFIG_ESP_WIFI_SSID
+//#define EXAMPLE_ESP_WIFI_PASS      "gvc123456" // CONFIG_ESP_WIFI_PASSWORD
+
 #define EXAMPLE_MAX_STA_CONN       3 // CONFIG_ESP_MAX_STA_CONN
 
 
@@ -81,6 +81,15 @@ struct async_resp_arg {
 };
 
 static const char *TAG = "AP galvanica";
+
+
+typedef struct {
+    char ssid[32];
+    char password[64];
+	uint8_t channel;
+} wifi_ap_cfg_t;
+wifi_ap_cfg_t wifi_cfg = {0};
+
 
 static int led_state = 0;
 
@@ -97,9 +106,8 @@ static char response_data[8192+4096];
 
 
 static void IRAM_ATTR bd_isr_handler(void* arg) {
-//    DS1803_set( 1, 0);
-//    DS1803_set( 0, 0);
-    gpio_set_level(LED_PIN, led_on);
+    DS1803_set( 1, 0);
+    DS1803_set( 0, 0);
 } // bd_isr_handler
 
 static void STOP( uint8_t ch ){
@@ -125,7 +133,6 @@ static void init_brown_detect(void)
     gpio_reset_pin( brown_detect_gpio);
     gpio_set_direction( brown_detect_gpio, GPIO_MODE_INPUT);
     gpio_set_pull_mode( brown_detect_gpio, GPIO_PULLUP_ONLY);
-//    gpio_set_pull_mode( brown_detect_gpio, GPIO_PULLDOWN_ONLY);
 
     gpio_install_isr_service(0);
     gpio_isr_handler_add(brown_detect_gpio, bd_isr_handler, NULL);
@@ -383,7 +390,7 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
         ESP_LOGI(TAG, "Got packet with message: %s", ws_pkt.payload);
     }
 
-    ESP_LOGI(TAG, "frame len is %d", ws_pkt.len);
+//??    ESP_LOGI(TAG, "frame len is %d", ws_pkt.len);
 
     if (ws_pkt.type == HTTPD_WS_TYPE_TEXT) {
 		if ( strcmp((char *)ws_pkt.payload, "toggle") == 0) {
@@ -482,9 +489,69 @@ void set_wifi_tx_power() {
     int8_t max_tx_power = 1; // 80 -> 20 dBm  ; 1 -> 0.25 dBm
     esp_wifi_set_max_tx_power(max_tx_power);
 }
+
+// --
+// esp_err_t read_wifi_config(void) 
+esp_err_t read_wifi_config(wifi_ap_cfg_t *cfg)
+{
+	if (cfg == NULL) {
+      ESP_LOGE(TAG, "Config structure pointer is NULL");
+      return ESP_ERR_INVALID_ARG;
+    }
+    ESP_LOGI(TAG, "Reading WiFi configuration from SPIFFS");
+
+    FILE* file = fopen("/spiffs/wifi.cfg", "r");
+    if (file == NULL) {
+        ESP_LOGE(TAG, "Failed to open wifi.cfg, using default values");
+        return ESP_FAIL;
+    }
+
+    char line[64] = {0};
+
+    // --- SSID ---
+    if (fgets(line, sizeof(line), file) == NULL) {
+        ESP_LOGE(TAG, "Failed to read SSID");
+        fclose(file);
+        return ESP_FAIL;
+    }
+    line[strcspn(line, "\r\n")] = 0;
+    strncpy(cfg->ssid, line, sizeof(cfg->ssid) - 1);
+
+    // --- PASSWORD ---
+    memset(line, 0, sizeof(line));
+    if (fgets(line, sizeof(line), file) == NULL) {
+        ESP_LOGE(TAG, "Failed to read PASSWORD");
+        fclose(file);
+        return ESP_FAIL;
+    }
+    line[strcspn(line, "\r\n")] = 0;
+    strncpy(cfg->password, line, sizeof(cfg->password) - 1);
+
+    // --- CHANNEL ---
+    memset(line, 0, sizeof(line));
+    if (fgets(line, sizeof(line), file) == NULL) {
+        ESP_LOGE(TAG, "Failed to read CHANNEL");
+        fclose(file);
+        return ESP_FAIL;
+    }
+    cfg->channel = (uint8_t)atoi(line);
+
+    fclose(file);
+    return ESP_OK;
+} // read_wifi_config
+
 // --
 void wifi_init_softap(void)
 {
+/*	
+    wifi_ap_cfg_t cfg = {0};
+    if (read_wifi_config(&cfg) != ESP_OK) {
+        ESP_LOGW(TAG, "Using default WiFi settings");
+        strcpy(cfg.ssid, "DefaultAP");
+        strcpy(cfg.password, "12345678");
+        cfg.channel = 6;
+    }
+*/
 	set_wifi_tx_power();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -497,38 +564,49 @@ void wifi_init_softap(void)
                                                         ESP_EVENT_ANY_ID,
                                                         &wifi_event_handler,
                                                         NULL,
-                                                        NULL));
+                                                        NULL)
+	);
 
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
-            .channel = EXAMPLE_ESP_WIFI_CHANNEL,
-            .password = EXAMPLE_ESP_WIFI_PASS,
+//            .ssid_len = strlen(wifi_ssid),
+//            .channel = EXAMPLE_ESP_WIFI_CHANNEL,
+            .password = "",
             .max_connection = EXAMPLE_MAX_STA_CONN,
 
 #ifdef CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
-//            .authmode = WIFI_AUTH_WPA3_PSK,
-//            .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
-#else /* CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT */
-//            .authmode = WIFI_AUTH_WPA2_PSK,
+            .authmode = WIFI_AUTH_WPA3_PSK,
+            .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
+#else
+            .authmode = WIFI_AUTH_WPA2_PSK,
 #endif
-
             .pmf_cfg = {
                     .required = true,
             },
-        },
-    };
-    if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
+        }, // .ap
+    }; // wifi_config_t 
+//	strncpy((char*)wifi_config.ap.ssid, wifi_ssid, sizeof(wifi_config.ap.ssid));
+//	strlcpy((char*)wifi_config.ap.password, wifi_password, sizeof(wifi_config.ap.password));
+
+    strncpy((char *)wifi_config.ap.ssid, wifi_cfg.ssid, sizeof(wifi_config.ap.ssid) - 1);
+    strncpy((char *)wifi_config.ap.password, wifi_cfg.password, sizeof(wifi_config.ap.password) - 1);
+    wifi_config.ap.ssid_len = strlen(wifi_cfg.ssid);
+    wifi_config.ap.channel = wifi_cfg.channel;
+//    wifi_config.ap.max_connection = 4;
+
+
+ESP_LOGI(TAG, "wifi_init_softap ??????? SSID:%s<>password:%s<>channel:%d",
+             wifi_config.ap.ssid, wifi_config.ap.password, wifi_config.ap.channel);
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
+             wifi_config.ap.ssid, wifi_config.ap.password, wifi_config.ap.channel
+    );
 }
 // - - - - - - - - - - -
 
@@ -557,8 +635,15 @@ void app_main()
 	xTaskCreate(&task_counter,   "countdown", 4096, NULL, 5, NULL);
 
     ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
+//    if (read_wifi_config() != ESP_OK) {
+    if (read_wifi_config(&wifi_cfg) == ESP_OK) {
+      ESP_LOGI(TAG, "Config: SSID=%s, PASS=%s, CH=%d", wifi_cfg.ssid, wifi_cfg.password, wifi_cfg.channel);
+    } else {
+      ESP_LOGE(TAG, "Failed to read WiFi config");
+    }
+ 
     wifi_init_softap();
-	
+//	
 	ESP_LOGI(TAG, "ESP32 ESP-IDF WebSocket Web Server is running ... ...\n");
 	initi_web_page_buffer();
 	setup_websocket_server();
