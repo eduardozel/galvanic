@@ -3,7 +3,7 @@
 <html>
 
 <head>
-    <title>Galvanyzer Server v 1.0</title>
+    <title>Galvanyzer Server v 1.01</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" href="data:,">
 	<link rel="stylesheet" href="styles.css">
@@ -166,7 +166,7 @@
 
 <body>
     <div class="topnav">
-        <h1>Galvanyzer Server v 1.1</h1>
+        <h1>Galvanyzer Server v 1.01</h1>
     </div>
     <script>
         var gateway = `ws://${window.location.hostname}/ws`;
@@ -199,7 +199,7 @@
 			if ( cnt1 > 0 ) {
 				const min1 = Math.floor( cnt1 / 60);
 				const sec1 = cnt1 - min1 * 60;
-				document.getElementById('counter1').innerText = min1 + ':' + sec1;
+				document.getElementById('counter1').innerText = min1 + ':' + String(sec1).padStart(2, '0');
 			} else {
 				document.getElementById('counter1').innerText = '- - -';
 			}
@@ -208,7 +208,7 @@
 				const cnt2 = data.timer2;
 				const min2 = Math.floor( cnt2 / 60);
 				const sec2 = cnt2 - min2 * 60;
-				document.getElementById('counter2').innerText = min2 + ':' + sec2;
+				document.getElementById('counter2').innerText = min2 + ':' + String(sec2).padStart(2, '0');;
 			} else {
 				document.getElementById('counter2').innerText = '- - -';
 			}
@@ -255,9 +255,10 @@
 <h1>Voltage Monitor</h1>
 <table border='1' align="center">
 <tr><th>channel #1</th><th>channel #2</th></tr>
-<tr><td id='v1'  class = 'voltage'>- - -</td><td id='v2' class = 'voltage'>- - -</td>
+
+<tr style='display:none' ><td id='v1' class = 'voltage'>- - -</td><td id='v2' class = 'voltage'>- - -</td>
 </tr>
-<tr><td id='c1'  class = 'current'>- - -</td><td id='c2' class = 'current'>- - -</td>
+<tr style='display:none' ><td id='c1' class = 'current'>- - -</td><td id='c2' class = 'current'>- - -</td>
 </tr>
 <tr><td id='counter1'  class = 'timer'>- - -</td><td id='counter2' class = 'timer'>- - -</td>
 </tr>
@@ -311,31 +312,29 @@
 <td>
     <select id="val1" class = "combo">
         <option value= "0">off</option>
-        <option value= "1">0.1</option>
-        <option value= "2">0.2</option>
-        <option value= "3">0.4</option>
-        <option value= "4">0.6</option>
-        <option value= "5">0.8</option>
-        <option value= "6">1.0</option>
-        <option value= "7">1.2</option>
-        <option value= "8">1.4</option>
-        <option value= "9">1.6</option>
-        <option value="10">1.8</option>
+        <option value= "1">0.2</option>
+        <option value= "2">0.4</option>
+        <option value= "3">0.6</option>
+        <option value= "4">0.8</option>
+        <option value= "5">1.0</option>
+        <option value= "6">1.2</option>
+        <option value= "7">1.4</option>
+        <option value= "8">1.6</option>
+        <option value= "9">1.8</option>
 	</select>
 </td>
 <td>
     <select id="val2" class = "combo">
         <option value="0">off</option>
-        <option value= "1">0.1</option>
-        <option value= "2">0.2</option>
-        <option value= "3">0.4</option>
-        <option value= "4">0.6</option>
-        <option value= "5">0.8</option>
-        <option value= "6">1.0</option>
-        <option value= "7">1.2</option>
-        <option value= "8">1.4</option>
-        <option value= "9">1.6</option>
-        <option value="10">1.8</option>
+        <option value= "1">0.2</option>
+        <option value= "2">0.4</option>
+        <option value= "3">0.6</option>
+        <option value= "4">0.8</option>
+        <option value= "5">1.0</option>
+        <option value= "6">1.2</option>
+        <option value= "7">1.4</option>
+        <option value= "8">1.6</option>
+        <option value= "9">1.8</option>
     </select>
 </td>
 </tr>
