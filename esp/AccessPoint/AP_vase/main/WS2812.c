@@ -21,9 +21,9 @@
 
 // 16 ступеней (массив, уровни 1-16)
 const rgb_t warm_white_steps[16] = {
-    {16, 12, 6},   {32, 24, 13},  {48, 36, 19},  {64, 48, 25},
-    {80, 59, 31},  {96, 71, 38},  {112, 83, 44}, {128, 95, 50},
-    {144, 107, 56},{159, 119, 63}, {175, 131, 69}, {191, 143, 75},
+    { 16,  12,  6}, { 32,  24, 13}, { 48,  36, 19}, { 64,  48,  25},
+    { 80,  59, 31}, { 96,  71, 38}, {112,  83, 44}, {128,  95,  50},
+    {144, 107, 56}, {159, 119, 63}, {175, 131, 69}, {191, 143,  75},
     {207, 154, 81}, {223, 166, 88}, {239, 178, 94}, {255, 190, 100}
 };
 
@@ -200,9 +200,9 @@ void setLEDsArray(rgb_t *led_array, size_t count)
     ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
 } // setLEDsArray
 
-void setProfile( int prfl )
+void setProfileN( int prfl )
 {
-//    ESP_LOGI(TAG, "setProfile>>%d",prfl);
+    ESP_LOGI(TAG, "setProfile>>%d",prfl);
     led_state_t *state = &led_states[prfl];
     setLEDsArray(state->leds, LED_COUNT_MAX);
 } // setProfile
@@ -232,7 +232,7 @@ void fade_in_warm_white( int max )
 
     0xFF9632 (255, 150, 50) - стандартный теплый
 
-    0xFF8B1A (255, 139, 26) - более теплый оттенок
+    0xFF8B1A (255,139,026) - более теплый оттенок
 	
 	
  */

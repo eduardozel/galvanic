@@ -144,7 +144,7 @@ static void init_led(){
     gpio_reset_pin(LED_PIN);
     gpio_set_direction( LED_PIN, GPIO_MODE_OUTPUT);
 	led_state = 0;
-    xTaskCreate(&task_blink_led, "BlinkLed",  4096, NULL, 5, NULL);
+    xTaskCreate(&task_blink_led, "BlinkLed",  2048, NULL, 5, NULL);
 } // init_led
 
 // * * * * *
@@ -644,7 +644,7 @@ void wifi_init_softap(void)
 #ifdef CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
             .authmode = WIFI_AUTH_WPA3_PSK,
             .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
-#else  CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
+#else
             .authmode = WIFI_AUTH_WPA2_PSK,
 #endif
 /*
@@ -698,8 +698,7 @@ void app_main()
     init_spiffs();
 
     init_led();
-	xTaskCreate(&task_counter,   "countdown", 4096, NULL, 5, NULL);
-
+	xTaskCreate(&task_counter,   "countdown", 2048, NULL, 5, NULL);
 
     gpio_config_t io_conf = {
 //        .mode = GPIO_MODE_OUTPUT,
@@ -723,13 +722,14 @@ void app_main()
 	};
 
 
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(BTN_1, touch_isr_handler, NULL);
-
 	ESP_LOGI(TAG, "              btn ... handler ... ...\n");
 	
 //    button_queue = xQueueCreate(10, 0); // Создание очереди (10 элементов, каждый — button_event_t)
     button_queue = xQueueCreate(10, sizeof(button_event_t));
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(BTN_1, touch_isr_handler, NULL);
+
+
     if (button_queue == NULL) {
         ESP_LOGE(TAG, "Ошибка создания очереди!");
         return;

@@ -61,10 +61,11 @@ static int lamp_state_from_str(const char *s, LAMP_state_t *out)
 */
 
 typedef enum {
-    white   = 0,
-    rainbow = 1,
-    custom  = 2,
-	profile = 3
+    white    = 0,
+    rainbow  = 1,
+    custom   = 2,
+	profile  = 3,
+	profileN = 4
 } LAMP_state_t;
 
 
@@ -73,6 +74,10 @@ LAMP_state_t lamp_state = white;
 
 bool         rainbow_active = false;
 TaskHandle_t rainbow_task_handle = NULL;
+
+bool         profile_active = false;
+TaskHandle_t profile_task_handle = NULL;
+
 
 int   current_duration = 5*60;
 int   total_seconds = 0;
@@ -118,6 +123,32 @@ void stop_rainbow(void) {
     }
 } // stop_rainbow
 /*==================*/
+void profile_task(void *arg) {
+	int i = 0;
+	int duration = 0;
+    while (profile_active) {
+        duration = 1000 * led_states[i].duration_sec;        
+		setProfileN(i);
+        vTaskDelay(pdMS_TO_TICKS( duration ));
+        i = (i + 1) % led_states_count;
+    }
+    vTaskDelete(NULL);
+} // profile_task
+
+void start_profile(void) {
+    if (profile_active) return;
+    profile_active = true;
+    xTaskCreate(profile_task, "profile_task", 2048, NULL, 5, &profile_task_handle);
+} // start_profile
+
+void stop_profile(void) {
+    if (!profile_active) return;
+    profile_active = false;
+    if (profile_task_handle != NULL) {
+        vTaskDelay(pdMS_TO_TICKS(200)); // Wait a bit for task to exit loop
+        profile_task_handle = NULL;
+    }
+} // stop_profile
 //-----------------
 void LAMP_turn_On(void){
 	total_seconds = current_duration;
@@ -132,7 +163,11 @@ void LAMP_turn_On(void){
 	  start_rainbow();
 	} else if ( profile == lamp_state ) {
 	  ESP_LOGI(TAG, "profile");
-	  setProfile(brightness-1);
+	  start_profile();
+	} else if ( profileN == lamp_state ) {
+	  ESP_LOGI(TAG, "profileN");
+	  ESP_LOGI(TAG, "profileN>%d<>%d<>%d", brightness, led_states_count, ( brightness-1) % (led_states_count));
+	  setProfileN( ( brightness-1) % (led_states_count));
 	} else {
 	  ESP_LOGE(TAG, "unknown lamp_state");
 	};
@@ -142,6 +177,7 @@ void LAMP_turn_On(void){
 void LAMP_turn_Off( void ){
   total_seconds = 0;
   stop_rainbow();
+  stop_profile();
   offAllLED();
   LAMP_on = false;
 } // LAMP_turn_Off
@@ -235,6 +271,8 @@ void lamp_settings_from_json(cJSON *json) {
             lamp_state = rainbow;
         } else if (strcmp(mode, "profile") == 0) {
             lamp_state = profile;
+        } else if (strcmp(mode, "profileN") == 0) {
+            lamp_state = profileN;
         } else {
             ESP_LOGE(TAG, "Unknown mode: %s", mode);
         }
@@ -332,8 +370,8 @@ bool load_led_states_from_cfg(void) {
 
         char *p = linebuf;
         int duration_sec = 0;
-		int tmp1 = 0;
-        int tmp2 = 0;
+//		int tmp1 = 0;
+//        int tmp2 = 0;
 //        ESP_LOGI(TAG, ">>>>>>>%s", p);
         int n = 0;
         if (sscanf(p, "%u%n", &duration_sec, &n) != 1) {
@@ -396,7 +434,7 @@ void LAMP_init(void){
 	load_led_states_from_cfg();
 	initWS2812();
 //	fade_in_warm_white( brightness );
-    setProfile(1);
+    setProfileN(0);
     vTaskDelay( 200 );
 	offAllLED();
 }; // LAMP_init
