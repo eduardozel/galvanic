@@ -109,6 +109,7 @@ showStatusMessage("onLoad");
         function initButton() {
             document.getElementById('start').addEventListener('click', btn_start);
             document.getElementById('stop').addEventListener('click',  btn_stop);
+            document.getElementById('turnon').addEventListener('click',  btn_on);
             document.getElementById('mode').addEventListener('change', toggleColors);
             document.getElementById('upload').addEventListener('click', btn_upload);
 		} // initButton()
@@ -154,6 +155,11 @@ showStatusMessage("onLoad");
         function btn_stop() {
 			showStatusMessage("btn_STOP");
             websocket.send(JSON.stringify({ act: 'stop' }));
+        } // btn_stop
+
+        function btn_on() {
+			showStatusMessage("btn_ON");
+            websocket.send(JSON.stringify({ act: 'turnon' }));
         } // btn_stop
 		
 		function toggleColors() {
