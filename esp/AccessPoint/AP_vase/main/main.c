@@ -1,3 +1,6 @@
+//
+// main.c
+//
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -43,8 +46,7 @@ typedef enum {
 } button_event_t;
 
 
-#define EXAMPLE_ESP_WIFI_SSID      "vase_1" // CONFIG_ESP_WIFI_SSID
-#define EXAMPLE_ESP_WIFI_PASS      "vase23456" // CONFIG_ESP_WIFI_PASSWORD
+
 #define EXAMPLE_ESP_WIFI_CHANNEL   6 // CONFIG_ESP_WIFI_CHANNEL 1 6 11
 #define EXAMPLE_MAX_STA_CONN       3 // CONFIG_ESP_MAX_STA_CONN
 
@@ -65,6 +67,7 @@ typedef struct {
     uint8_t password[64];
 } wifi_ap_cfg_t;
 
+static int freqLED = 10000;
 static int led_state = 0;
 
 static const int tick = 10;
@@ -74,7 +77,7 @@ static const int tick = 10;
 #define SCRIPT_JS_PATH  "/spiffs/script.js"
 
 static char index_html[4096];
-static char style_css[4096];
+static char style_css[4096+512];
 static char script_js[4096+4096]; 
 
 //static char response_data[8192+4096];
@@ -134,9 +137,9 @@ static void touch_task(void* arg) {
 void task_blink_led(void *arg) {
     while (1) {
         gpio_set_level(LED_PIN, led_off);
-        vTaskDelay(  500 / portTICK_PERIOD_MS);
+        vTaskDelay(  freqLED / portTICK_PERIOD_MS);
         gpio_set_level(LED_PIN, led_on);
-        vTaskDelay( 1000 / portTICK_PERIOD_MS);
+        vTaskDelay( 100 / portTICK_PERIOD_MS);
     }
 } // task_blink_led
 
@@ -473,11 +476,14 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 			if (json) {
 				bool cmdStart = false;
 				bool cmdStop  = false;
+				bool cmdOn    = false; 
 				const char *action = cJSON_GetObjectItem(json, "act")->valuestring;
 				if (strcmp(action, "start") == 0) {
 					cmdStart = true;
 				} else if (strcmp(action, "stop") == 0) {
 					cmdStop = true;
+				} else if (strcmp(action, "turnon") == 0) {
+					cmdOn = true;
 				} else if (strcmp(action, "getState") == 0) {
 					return trigger_async_send(req->handle, req);
 				}
@@ -490,28 +496,39 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 				if ( cmdStop ) {
 					LAMP_turn_Off();
 				}
+				if ( cmdOn ) {
+                    LAMP_turn_On();
+				}
 			} // if (json)
 			cJSON_Delete(json);
 		}
+	} else if (ws_pkt.type == HTTPD_WS_TYPE_CLOSE) {
+      ESP_LOGI(TAG, "WebSocket connection closed by client");
+	  if ( buf != NULL ) {
+        free(buf);
+	  }
+      return ESP_OK;
     }
     return ESP_OK;
-}
+} // handle_ws_req
 
 esp_err_t not_found_handler(httpd_req_t *req) {
     ESP_LOGE(TAG, "404: URI not found: %s", req->uri);
     httpd_resp_send_404(req);
     return ESP_OK;
-}
+} // not_found_handler
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
 {
     if (event_id == WIFI_EVENT_AP_STACONNECTED) {
         wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
+		freqLED = 3000;
         ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
                  MAC2STR(event->mac), event->aid);
     } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
+		freqLED = 10000;
         ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
                  MAC2STR(event->mac), event->aid);
     }
@@ -660,9 +677,12 @@ void wifi_init_softap(void)
         },
     }; // wifi_config_t 
 	strncpy((char*)wifi_config.ap.ssid, wifi_ssid, sizeof(wifi_config.ap.ssid));
+
+/*
     if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
     }
+*/
 	strlcpy((char*)wifi_config.ap.password, wifi_password, sizeof(wifi_config.ap.password));
 
 ESP_LOGI(TAG, "wifi_init_softap ??????? SSID:%s<>password:%s<>channel:%d",

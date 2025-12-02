@@ -15,9 +15,7 @@
 #define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 #define RMT_LED_STRIP_GPIO_NUM      5
 
-#define RING_LED_NUMBERS            32 // 16
 #define EXAMPLE_CHASE_SPEED_MS      10
-
 
 // 16 ступеней (массив, уровни 1-16)
 const rgb_t warm_white_steps[16] = {
@@ -27,12 +25,11 @@ const rgb_t warm_white_steps[16] = {
     {207, 154, 81}, {223, 166, 88}, {239, 178, 94}, {255, 190, 100}
 };
 
-
 static const char *TAG = "ws2812";
 
 static int brightness = 4;
 
-static uint8_t led_strip_pixels[RING_LED_NUMBERS * 3];
+static uint8_t led_strip_pixels[MAX_LED_NUMBERS * 3];
 
 led_state_t *led_states = NULL;
 
@@ -164,7 +161,7 @@ void offAllLED( )
 
 void setAllLED_rgb( uint32_t red, uint32_t green, uint32_t blue )
 {
-	for (int j = 0; j < RING_LED_NUMBERS; j ++) {
+	for (int j = 0; j < MAX_LED_NUMBERS; j ++) {
 //	            led_strip_hsv2rgb(hue, 100, 100, &red, &green, &blue);
 		led_strip_pixels[j * 3 + 0] = green;
 		led_strip_pixels[j * 3 + 1] = red;
@@ -180,8 +177,8 @@ void setAllLED( rgb_t color ){
 
 void setLEDsArray(rgb_t *led_array, size_t count)
 {
-    if (count > RING_LED_NUMBERS) {
-        count = RING_LED_NUMBERS;
+    if (count > MAX_LED_NUMBERS) {
+        count = MAX_LED_NUMBERS;
     }
 
     for (size_t i = 0; i < count; i++) {
@@ -190,7 +187,7 @@ void setLEDsArray(rgb_t *led_array, size_t count)
         led_strip_pixels[i * 3 + 2] = led_array[i].blue;
     }
 
-    for (size_t i = count; i < RING_LED_NUMBERS; i++) {
+    for (size_t i = count; i < MAX_LED_NUMBERS; i++) {
         led_strip_pixels[i * 3 + 0] = 0;
         led_strip_pixels[i * 3 + 1] = 0;
         led_strip_pixels[i * 3 + 2] = 0;
@@ -201,10 +198,9 @@ void setLEDsArray(rgb_t *led_array, size_t count)
 } // setLEDsArray
 
 void setProfileN( int prfl )
-{
-    ESP_LOGI(TAG, "setProfile>>%d",prfl);
+{//   ESP_LOGI(TAG, "setProfile>>%d",prfl);
     led_state_t *state = &led_states[prfl];
-    setLEDsArray(state->leds, LED_COUNT_MAX);
+    setLEDsArray(state->leds, MAX_LED_NUMBERS);
 } // setProfile
 
 void fade_in_warm_white( int max )
@@ -215,7 +211,6 @@ void fade_in_warm_white( int max )
       setAllLED_rgb( warm_white_steps[step].red, warm_white_steps[step].green, warm_white_steps[step].blue);
 	  vTaskDelay(500 / portTICK_PERIOD_MS);
     }
-
 } // fade_in_warm_white
 
 

@@ -1,3 +1,6 @@
+//
+// lamp.c
+//
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_system.h"
@@ -151,6 +154,7 @@ void stop_profile(void) {
 } // stop_profile
 //-----------------
 void LAMP_turn_On(void){
+    LAMP_turn_Off();
 	total_seconds = current_duration;
 	if ( white == lamp_state ) {
 	  ESP_LOGI(TAG, "white");
@@ -386,7 +390,7 @@ bool load_led_states_from_cfg(void) {
 
         led_states[i].duration_sec = duration_sec;
 
-        for (int led_i = 0; led_i < LED_COUNT_MAX; led_i++) {
+        for (int led_i = 0; led_i < MAX_LED_NUMBERS; led_i++) {
             int r, g, b;
 
             if (sscanf(p, "{%u,%u,%u}", &r, &g, &b) != 3) { // "{%d,%d,%d}"
@@ -409,7 +413,7 @@ bool load_led_states_from_cfg(void) {
             }
             p = brace_end + 1;
             while (*p == ' ' || *p == ',') p++;
-        } //for led_i < LED_COUNT_MAX
+        } //for led_i < MAX_LED_NUMBERS
     } // for i < led_states_count
     fclose(f);
 /*
@@ -433,8 +437,8 @@ void LAMP_init(void){
 	read_config_file();
 	load_led_states_from_cfg();
 	initWS2812();
-//	fade_in_warm_white( brightness );
-    setProfileN(0);
+	fade_in_warm_white( 3 );
+//    setProfileN(0);
     vTaskDelay( 200 );
 	offAllLED();
 }; // LAMP_init
