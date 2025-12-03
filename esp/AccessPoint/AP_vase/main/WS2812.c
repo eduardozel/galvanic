@@ -13,7 +13,6 @@
 #include "led_strip_encoder.h"
 
 #define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
-#define RMT_LED_STRIP_GPIO_NUM      5
 
 #define EXAMPLE_CHASE_SPEED_MS      10
 
@@ -26,6 +25,9 @@ const rgb_t warm_white_steps[16] = {
 };
 
 static const char *TAG = "ws2812";
+
+//#define RMT_LED_STRIP_GPIO_NUM      5
+int LED_STRIP_GPIO;
 
 static int brightness = 4;
 
@@ -129,7 +131,8 @@ void initWS2812()
     led_chan = NULL;
     tx_chan_config = (rmt_tx_channel_config_t) {
         .clk_src = RMT_CLK_SRC_DEFAULT, // select source clock
-        .gpio_num = RMT_LED_STRIP_GPIO_NUM,
+//        .gpio_num = RMT_LED_STRIP_GPIO_NUM,
+        .gpio_num = LED_STRIP_GPIO,
         .mem_block_symbols = 64, // increase the block size can make the LED less flickering
         .resolution_hz = RMT_LED_STRIP_RESOLUTION_HZ,
         .trans_queue_depth = 4, // set the number of transactions that can be pending in the background

@@ -33,7 +33,9 @@
 
 #include "lamp.h"
 
-#define BTN_1 GPIO_NUM_6  //  SIG на GPIO6
+//#define BTN_1 GPIO_NUM_6  //  SIG на GPIO6
+
+int BTN_1;
 
 #define LED_PIN 8
 #define led_on  0
@@ -597,11 +599,11 @@ void set_wifi_tx_power() {
     esp_wifi_set_max_tx_power(max_tx_power);
 }
 // --
-esp_err_t read_wifi_config_from_file(void) {
+esp_err_t read_lamp_config_from_file(void) {
     ESP_LOGI(TAG, "Reading WiFi configuration from SPIFFS");
 //    strlcpy(wifi_ssid, EXAMPLE_ESP_WIFI_SSID, sizeof(wifi_ssid));
 
-    FILE* file = fopen("/spiffs/wifi.cfg", "r");
+    FILE* file = fopen("/spiffs/lamp.cfg", "r");
     if (file == NULL) {
         ESP_LOGE(TAG, "Failed to open wifi_config.txt, using default values");
         return ESP_FAIL;
@@ -629,8 +631,12 @@ esp_err_t read_wifi_config_from_file(void) {
     ESP_LOGI(TAG, "Read Password: %s<<!!!", wifi_password);
 
     fclose(file);
+	
+	LED_STRIP_GPIO = 5;
+	BTN_1 = 6;
+
     return ESP_OK;
-} // read_wifi_config_from_file
+} // read_lamp_config_from_file
 // --
 void wifi_init_softap(void)
 {
@@ -719,6 +725,10 @@ void app_main()
 
     init_led();
 	xTaskCreate(&task_counter,   "countdown", 2048, NULL, 5, NULL);
+    if (read_lamp_config_from_file() != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to read Lamp configuration!");
+        return;
+    }
 
     gpio_config_t io_conf = {
 //        .mode = GPIO_MODE_OUTPUT,
@@ -758,10 +768,6 @@ void app_main()
 
 
     ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
-    if (read_wifi_config_from_file() != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to read WiFi configuration!");
-        return;
-    }
     wifi_init_softap();
 
 	ESP_LOGI(TAG, "ESP32 ESP-IDF WebSocket Web Server is running ... ...\n");

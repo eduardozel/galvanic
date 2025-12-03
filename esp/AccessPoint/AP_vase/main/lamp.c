@@ -16,10 +16,9 @@
 #include "lamp.h"
 
 
-#define CONFIG_FILE     "/spiffs/lamp.cfg"
+#define CONFIG_FILE     "/spiffs/lighting.cfg"
 
 static const char *TAG = "LAMP";
-
 
 static int led_states_count = 0;
 static const char* sequence_filename = "/spiffs/led_sequence.cfg";

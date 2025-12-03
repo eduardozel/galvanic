@@ -19,6 +19,7 @@ typedef struct {
 } led_state_t;
 
 extern led_state_t *led_states;
+extern int LED_STRIP_GPIO;
 
 void initWS2812( void );
 void setAllLED_rgb( uint32_t red, uint32_t green, uint32_t blue ); // uint8_t
