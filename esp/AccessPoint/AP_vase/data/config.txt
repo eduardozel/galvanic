@@ -1,2 +1,0 @@
-  max_time=60
-  remain_time=60
