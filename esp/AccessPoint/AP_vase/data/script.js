@@ -131,11 +131,14 @@ showStatusMessage("onLoad");
             const brightness = document.getElementById('brightness').value;
 			const duration = ( parseInt(document.getElementById('hr').value,   10) || 0 ) + Number(document.getElementById('mn').value);
             const mode = document.getElementById('mode').value;
+            const lamp_start = document.getElementById('lampstart').value;
+
 			
 			const payload = {
 				act: 'start',
 				duration: duration,
 				mode: mode,
+                lstart: lamp_start,
 				brightness: brightness,
 				red:   red,
 				green: green,
