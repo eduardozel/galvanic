@@ -71,7 +71,9 @@ typedef enum {
 } LAMP_state_t;
 
 
-bool LAMP_on = false;
+bool LAMP_on   = false;
+int lamp_start_on = 1;
+
 LAMP_state_t lamp_state = white;
 
 bool         rainbow_active = false;
@@ -195,6 +197,7 @@ void write_config_file(void) {
     fprintf(f, "red=%d\ngreen=%d\nblue=%d\n", custom_color.red, custom_color.green, custom_color.blue);
     ESP_LOGI(TAG, "Config written:\n brightness=%d\nduration=%d\n", brightness, current_duration);
 	fprintf(f, "lamp_state=%d\n",(int)lamp_state);
+	fprintf(f, "lamp_start=%d\n",lamp_start_on);
     fclose(f);
 } // write_config_file
 
@@ -227,6 +230,8 @@ void read_config_file(void) {
         } else if (sscanf(line, "lamp_state=%d", &tmp) == 1) {
 			lamp_state = (LAMP_state_t)tmp;
             ESP_LOGI(TAG, "Read lamp_state=%d", lamp_state);
+        } else if (sscanf(line, "lamp_start=%d", &lamp_start_on) == 1) {
+            ESP_LOGI(TAG, "Read lamp_strt=%d", lamp_start_on);
         }
     } // while
     fclose(f);
@@ -294,7 +299,19 @@ void lamp_settings_from_json(cJSON *json) {
         } else {
             ESP_LOGE(TAG, "Brightness is not a number or string");
         }
-    }
+    } // brightness_item
+	
+    cJSON *lampstart_item = cJSON_GetObjectItem(json, "lampstart");
+    if (lampstart_item != NULL) {
+        if (cJSON_IsNumber(lampstart_item)) {
+            lamp_start_on = lampstart_item->valueint;
+//        } else if (cJSON_IsString(lampstart_item)) {
+//            brightness = atoi(lampstart_item->valuestring);
+        } else {
+            ESP_LOGE(TAG, "Brightness is not a number or string");
+        }
+    } // lampstart_item
+
     write_config_file();
     LAMP_turn_On();
 
@@ -436,8 +453,11 @@ void LAMP_init(void){
 	read_config_file();
 	load_led_states_from_cfg();
 	initWS2812();
-	fade_in_warm_white( 3 );
-//    setProfileN(0);
-    vTaskDelay( 200 );
-	offAllLED();
+    if ( 1 == lamp_start_on ) {
+      LAMP_turn_On();
+    } else {
+  	  fade_in_warm_white( 3 );
+      vTaskDelay( 200 );
+	  offAllLED();
+	};
 }; // LAMP_init

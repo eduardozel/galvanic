@@ -103,12 +103,11 @@ static void IRAM_ATTR touch_isr_handler(void* arg) {
     xQueueSendFromISR( button_queue, &btn, &higher_priority_task_woken);
 }
 
-// Задача для обработки касаний
 static void touch_task(void* arg) {
 //    button_event_t event;
     uint32_t btn;
 //    static uint64_t last_time_on = 0;   // Для debounce TTP223
-//    static uint64_t last_time_off = 0;  // Для debounce кнопки OFF
+//    static uint64_t last_time_off = 0;  // Для debounce  OFF
 
     while (1) {
 //        if (xQueueReceive(button_queue, NULL, portMAX_DELAY)) {
@@ -141,7 +140,7 @@ void task_blink_led(void *arg) {
         gpio_set_level(LED_PIN, led_off);
         vTaskDelay(  freqLED / portTICK_PERIOD_MS);
         gpio_set_level(LED_PIN, led_on);
-        vTaskDelay( 100 / portTICK_PERIOD_MS);
+        vTaskDelay( 50 / portTICK_PERIOD_MS);
     }
 } // task_blink_led
 
