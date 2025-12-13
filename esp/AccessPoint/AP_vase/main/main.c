@@ -1,5 +1,6 @@
 //
 // main.c
+// esp-idf v 5.5.1
 //
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,7 +81,7 @@ static const int tick = 10;
 
 static char index_html[4096];
 static char style_css[4096+512];
-static char script_js[4096+4096]; 
+static char script_js[4096+4096+1024]; 
 
 //static char response_data[8192+4096];
 /***********************/
@@ -477,14 +478,14 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 			if (json) {
 				bool cmdStart = false;
 				bool cmdStop  = false;
-				bool cmdOn    = false; 
+				bool cmdOnOff = false; 
 				const char *action = cJSON_GetObjectItem(json, "act")->valuestring;
 				if (strcmp(action, "start") == 0) {
 					cmdStart = true;
 				} else if (strcmp(action, "stop") == 0) {
 					cmdStop = true;
-				} else if (strcmp(action, "turnon") == 0) {
-					cmdOn = true;
+				} else if (strcmp(action, "togglelight") == 0) {
+					cmdOnOff = true;
 				} else if (strcmp(action, "getState") == 0) {
 					return trigger_async_send(req->handle, req);
 				}
@@ -497,8 +498,12 @@ static esp_err_t handle_ws_req(httpd_req_t *req)
 				if ( cmdStop ) {
 					LAMP_turn_Off();
 				}
-				if ( cmdOn ) {
+				if ( cmdOnOff ) {
+                  if (!LAMP_on) {
                     LAMP_turn_On();
+                  } else {
+				    LAMP_turn_Off();
+                  } // if LAMP_on				
 				}
 			} // if (json)
 			cJSON_Delete(json);
