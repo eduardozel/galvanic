@@ -8,8 +8,11 @@
         }
 
         h1 {
-            font-size: 1.8rem;
+            font-size: 15px;
             color: white;
+            margin: 0;
+            line-height: 1.2;
+            padding: 3px 0;
         }
 
         .topnav {
@@ -22,11 +25,6 @@
 			color: #120707;
 			font-weight: bold;
 		}
-
-        .button:active {
-            background-color: #fa0f0f;
-            transform: translateY(2px);
-        }
 
         .btnStart {
             padding: 15px 50px;
@@ -49,10 +47,10 @@
 		}
 
 		.btnStart:hover {
-			background-color: #0cd85a; /* Hover эффект */
+			background-color: #0cd85a;
 		}
 
-        .btnOn {
+        .btnToggle {
             padding: 15px 50px;
             font-size: 16px;
             text-align: center;
@@ -72,6 +70,10 @@
 			cursor: pointer; /* указатель мыши как рука */
 		}
 
+        .btnToggle:active {
+            background-color: #fa0f0f;
+            transform: translateY(2px);
+        }
 
         .btnStop {
             padding: 15px 50px;
@@ -163,5 +165,5 @@
         }
 
         input[type="file"] {
-          margin: 10px 0;
+          margin: 12px 0;
         }

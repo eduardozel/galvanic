@@ -13,6 +13,9 @@
 //      var gateway = 'ws://' + window.location.hostname + '/ws';
 		var gateway = `ws://${window.location.hostname}/ws`;
         var websocket;
+		
+		let onMessageTimeout;
+		
         window.addEventListener('load', onLoad);
 
 		function showStatusMessage(text, duration = 5000) {
@@ -22,6 +25,20 @@
 			statusDiv.style.display = 'block';
 			setTimeout(() => {statusDiv.style.display = 'none';}, duration);
 		} // showStatusMessage
+
+        function resetOnMessageTimeout() {
+          clearOnMessageTimeout();
+          onMessageTimeout = setTimeout(() => {
+              showStatusMessage("not connected");
+          }, 15000); // 15 секунд без сообщений
+        } // resetOnMessageTimeout
+
+        function clearOnMessageTimeout() {
+          if (onMessageTimeout) {
+            clearTimeout(onMessageTimeout);
+            onMessageTimeout = null;
+          } 
+        } // clearOnMessageTimeout
 
         function initWebSocket() {
             console.log('Trying to open a WebSocket connection...');
@@ -33,13 +50,16 @@
         function onOpen(event) {
             console.log('Connection opened');
 			getState();
+			resetOnMessageTimeout();
         }
         function onClose(event) {
             console.log('Connection closed');
+			clearOnMessageTimeout();
             setTimeout(initWebSocket, 2000);
         }
         function onMessage(event) {
             console.log(event.data);
+			resetOnMessageTimeout();
 			var data = JSON.parse(event.data);
 
 			const cnt = data.timer;
@@ -78,7 +98,7 @@
         } // onMessage(
 
         function onLoad(event) {
-showStatusMessage("onLoad");
+            showStatusMessage("onLoad");showStatusMessage("onLoad");
             initWebSocket();
             initButton();
             setInterval(getState, 10000);
@@ -109,7 +129,7 @@ showStatusMessage("onLoad");
         function initButton() {
             document.getElementById('start').addEventListener('click', btn_start);
             document.getElementById('stop').addEventListener('click',  btn_stop);
-            document.getElementById('turnon').addEventListener('click',  btn_on);
+            document.getElementById('b_toggle').addEventListener('click',  btn_toggle);
             document.getElementById('mode').addEventListener('change', toggleColors);
             document.getElementById('upload').addEventListener('click', btn_upload);
 		} // initButton()
@@ -160,9 +180,14 @@ showStatusMessage("onLoad");
             websocket.send(JSON.stringify({ act: 'stop' }));
         } // btn_stop
 
-        function btn_on() {
-			showStatusMessage("btn_ON");
-            websocket.send(JSON.stringify({ act: 'turnon' }));
+        function btn_toggle() {
+			showStatusMessage("btn_Toggle");
+            websocket.send(JSON.stringify({ act: 'togglelight' }));
+            const toggleButton = document.getElementById('b_toggle');
+            toggleButton.disabled = true;
+            setTimeout(() => {
+              toggleButton.disabled = false;
+            }, 5000);
         } // btn_stop
 		
 		function toggleColors() {
