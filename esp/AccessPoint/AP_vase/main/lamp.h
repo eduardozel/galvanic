@@ -5,10 +5,11 @@
 #include <string.h>
 #include <math.h>
 #include <stdbool.h>
+#include "cJSON.h"
 
 #include "WS2812.h"
 
-extern int   total_seconds;
+extern volatile uint32_t total_seconds;
 
 extern bool  LAMP_on;
 

@@ -3,9 +3,11 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
+#include "driver/gpio.h"
 
 #define MAX_LED_NUMBERS 40
-//#define LED_COUNT_MAX 40
+
 
 typedef struct {
     uint8_t red;
@@ -19,7 +21,7 @@ typedef struct {
 } led_state_t;
 
 extern led_state_t *led_states;
-extern int LED_STRIP_GPIO;
+extern gpio_num_t LED_STRIP_GPIO;
 
 void initWS2812( void );
 void setAllLED_rgb( uint32_t red, uint32_t green, uint32_t blue ); // uint8_t

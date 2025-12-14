@@ -7,7 +7,7 @@
 #include <math.h>
 #include <string.h>
 
-#include <inttypes.h> // заголовок для макросов формата
+#include <inttypes.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -34,9 +34,7 @@
 
 #include "lamp.h"
 
-//#define BTN_1 GPIO_NUM_6  //  SIG на GPIO6
-
-int BTN_1;
+static gpio_num_t BTN_1_PIN;
 
 #define LED_PIN 8
 #define led_on  0
@@ -62,6 +60,7 @@ struct async_resp_arg {
 static const char *TAG = "AP vase";
 
 
+static esp_netif_t *ap_netif = NULL;
 static char wifi_ssid[32]     = {0};
 static char wifi_password[64] = {0};
 
@@ -97,40 +96,33 @@ void monitor_wifi_status() {
 // - - - -  -
 
 /* * * * * */
-// +++ Обработчик прерывания (касание)
 static void IRAM_ATTR touch_isr_handler(void* arg) {
     BaseType_t higher_priority_task_woken = pdFALSE;
-	uint32_t btn = BTN_1;
-    xQueueSendFromISR( button_queue, &btn, &higher_priority_task_woken);
+    button_event_t event = EVENT_BUTTON_1;
+    xQueueSendFromISR( button_queue, &event, &higher_priority_task_woken);
+    portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
 static void touch_task(void* arg) {
-//    button_event_t event;
-    uint32_t btn;
+    button_event_t event;
 //    static uint64_t last_time_on = 0;   // Для debounce TTP223
 //    static uint64_t last_time_off = 0;  // Для debounce  OFF
 
     while (1) {
-//        if (xQueueReceive(button_queue, NULL, portMAX_DELAY)) {
-        if (xQueueReceive(button_queue, &btn, portMAX_DELAY)) {
-//            uint64_t current_time = esp_timer_get_time();
-
-            if (btn == BTN_1) {
-//            switch (event) {
-//                case EVENT_BUTTON_1:
-//                    break;
-//                default:
-//                    ESP_LOGW(TAG, "Неизвестное событие: %d", event);
-//                    break;
-//            }; // switch 
-              ESP_LOGI(TAG, "Touch detected");
-//            start_rainbow();
-              if (!LAMP_on) {
-                LAMP_turn_On();
-              } else {
-				LAMP_turn_Off();
-              } // if LAMP_on
-            };
+        if (xQueueReceive(button_queue, &event, portMAX_DELAY)) {
+            switch (event) {
+                case EVENT_BUTTON_1:
+                  ESP_LOGI(TAG, "Touch button1 detected");
+                  if (!LAMP_on) {
+                    LAMP_turn_On();
+                  } else {
+				    LAMP_turn_Off();
+                  } // if LAMP_on
+                  break;
+                default:
+                    ESP_LOGW(TAG, "Неизвестное событие: %d", event);
+                    break;
+            }; // switch 
         } // if
     } // while
 }
@@ -155,7 +147,7 @@ static void init_led(){
 // * * * * *
 
 //  / * / * / *
-void task_counter(void *arg) {
+void lamp_timeout_task(void *arg) {
     while (1) {
 //      if ( total_seconds > 0 ) {
 		if        ( total_seconds   > tick ) { total_seconds -= tick;
@@ -164,7 +156,7 @@ void task_counter(void *arg) {
 //      } // if 
 		vTaskDelay( 10000 / portTICK_PERIOD_MS);
     } // while
-} // task_counter
+} // lamp_timeout_task
 
 void init_spiffs() {
     esp_vfs_spiffs_conf_t spiffs_conf = {
@@ -191,9 +183,9 @@ void init_spiffs() {
 */
 }; // init_spiffs
 
-static void initi_web_page_buffer(void)
+static void init_web_page_buffer(void)
 {
-	ESP_LOGI(TAG, "=== === === ===  initi_web_page_buffer ... ... ... ...\n");
+	ESP_LOGI(TAG, "=== === === ===  init_web_page_buffer ... ... ... ...\n");
 
     memset((void *)index_html, 0, sizeof(index_html));
     struct stat st;
@@ -264,7 +256,7 @@ static void initi_web_page_buffer(void)
     }
     fclose(fp);
 
-} // initi_web_page_buffer
+} // init_web_page_buffer
 
 
 esp_err_t style_handler(httpd_req_t *req) {
@@ -603,6 +595,44 @@ void set_wifi_tx_power() {
     esp_wifi_set_max_tx_power(max_tx_power);
 }
 // --
+/*
+На ESP32-C3 избегайте:
+
+GPIO_NUM_11 — строб памяти (flash)
+GPIO_NUM_12–GPIO_NUM_17 — внутренняя SPI Flash/PSRAM
+
+bool is_valid_gpio(gpio_num_t pin) {
+    // Список допустимых GPIO для ESP32-C3 (без USB и стробов)
+    const gpio_num_t valid_pins[] = {
+        GPIO_NUM_0, GPIO_NUM_1, GPIO_NUM_2, GPIO_NUM_3, GPIO_NUM_4,
+        GPIO_NUM_5, GPIO_NUM_6, GPIO_NUM_7, GPIO_NUM_8, GPIO_NUM_9,
+        GPIO_NUM_10, GPIO_NUM_18, GPIO_NUM_19, GPIO_NUM_20, GPIO_NUM_21
+    };
+    const size_t count = sizeof(valid_pins) / sizeof(valid_pins[0]);
+
+    for (size_t i = 0; i < count; i++) {
+        if (valid_pins[i] == pin) {
+            return true;
+        }
+    }
+    return false;
+}
+
+if (pin_num < 0 || pin_num > 21) {
+    ESP_LOGE(TAG, "GPIO %d out of range [0..21]", pin_num);
+    return ESP_ERR_INVALID_ARG;
+}
+
+gpio_num_t gpio_pin = (gpio_num_t)pin_num;
+
+if (!is_valid_gpio(gpio_pin)) {
+    ESP_LOGE(TAG, "GPIO %d is not usable on ESP32-C3", pin_num);
+    return ESP_ERR_INVALID_ARG;
+}
+
+BTN_1_PIN = gpio_pin;
+*/
+
 esp_err_t read_lamp_config_from_file(void) {
     ESP_LOGI(TAG, "Reading WiFi configuration from SPIFFS");
 //    strlcpy(wifi_ssid, EXAMPLE_ESP_WIFI_SSID, sizeof(wifi_ssid));
@@ -636,8 +666,20 @@ esp_err_t read_lamp_config_from_file(void) {
 
     fclose(file);
 	
-	LED_STRIP_GPIO = 5;
-	BTN_1 = 6;
+	LED_STRIP_GPIO = (gpio_num_t)5;
+	BTN_1_PIN = (gpio_num_t)6;
+/*
+char gpio_str[8] = {0};
+if (fgets(gpio_str, sizeof(gpio_str), file) == NULL) {
+    ESP_LOGE(TAG, "Failed to read GPIO pin");
+    return ESP_FAIL;
+}
+// Удаляем \r\n
+gpio_str[strcspn(gpio_str, "\r\n")] = '\0';
+
+int pin_num = atoi(gpio_str);
+*/
+
 
     return ESP_OK;
 } // read_lamp_config_from_file
@@ -647,10 +689,14 @@ void wifi_init_softap(void)
 	set_wifi_tx_power();
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_ap();
+
+    ap_netif = esp_netif_create_default_wifi_ap();
+    assert(ap_netif);	
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
                                                         ESP_EVENT_ANY_ID,
@@ -660,12 +706,8 @@ void wifi_init_softap(void)
 
     wifi_config_t wifi_config = {
         .ap = {
-//            .ssid = EXAMPLE_ESP_WIFI_SSID,
-//            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
             .ssid_len = strlen(wifi_ssid),
             .channel = EXAMPLE_ESP_WIFI_CHANNEL,
-//            .password = EXAMPLE_ESP_WIFI_PASS,
-            .password = "",
             .max_connection = EXAMPLE_MAX_STA_CONN,
 
 #ifdef CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
@@ -674,26 +716,16 @@ void wifi_init_softap(void)
 #else
             .authmode = WIFI_AUTH_WPA2_PSK,
 #endif
-/*
-    if (strlen(wifi_password) == 0) {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    } else {
-        wifi_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
-    }
-*/
             .pmf_cfg = {
                     .required = true,
             },
         },
     }; // wifi_config_t 
-	strncpy((char*)wifi_config.ap.ssid, wifi_ssid, sizeof(wifi_config.ap.ssid));
-
-/*
-    if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
-*/
-	strlcpy((char*)wifi_config.ap.password, wifi_password, sizeof(wifi_config.ap.password));
+	strncpy((char*)wifi_config.ap.ssid, wifi_ssid, sizeof(wifi_config.ap.ssid)-1);
+    wifi_config.ap.ssid[sizeof(wifi_config.ap.ssid) - 1] = '\0';
+	
+	strlcpy((char*)wifi_config.ap.password, wifi_password, sizeof(wifi_config.ap.password)-1);
+    wifi_config.ap.password[sizeof(wifi_config.ap.password) - 1] = '\0';
 
 ESP_LOGI(TAG, "wifi_init_softap ??????? SSID:%s<>password:%s<>channel:%d",
              wifi_config.ap.ssid, wifi_config.ap.password, EXAMPLE_ESP_WIFI_CHANNEL);
@@ -728,7 +760,9 @@ void app_main()
     init_spiffs();
 
     init_led();
-	xTaskCreate(&task_counter,   "countdown", 2048, NULL, 5, NULL);
+	if ( xTaskCreate(&lamp_timeout_task,   "countdown", 2048, NULL, 5, NULL) != pdPASS) {
+      ESP_LOGE(TAG, "Failed to create lamp_timeout_task!");
+    }
     if (read_lamp_config_from_file() != ESP_OK) {
         ESP_LOGE(TAG, "Failed to read Lamp configuration!");
         return;
@@ -741,27 +775,27 @@ void app_main()
 
 
     io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pin_bit_mask = (1ULL << BTN_1);
+    io_conf.pin_bit_mask = (1ULL << BTN_1_PIN);
     io_conf.intr_type = GPIO_INTR_POSEDGE;  // Rising edge
-    io_conf.pull_down_en = 1;               // Pull-down для стабильности
+
+    io_conf.pull_down_en = 0;
+    io_conf.pull_up_en = 1;
     gpio_config(&io_conf);
 
 
     vTaskDelay(pdMS_TO_TICKS(10));
-    int button_state = gpio_get_level(BTN_1);
+    int button_state = gpio_get_level(BTN_1_PIN);
     if (button_state == 1) {
       ESP_LOGI(TAG, "+++ ++ ++ ++  btn ... ... ... ...\n");
     } else {
       ESP_LOGI(TAG, "--- -- -- --  btn ... ... ... ...\n");
 	};
 
-
 	ESP_LOGI(TAG, "              btn ... handler ... ...\n");
-	
-//    button_queue = xQueueCreate(10, 0); // Создание очереди (10 элементов, каждый — button_event_t)
+
     button_queue = xQueueCreate(10, sizeof(button_event_t));
     gpio_install_isr_service(0);
-    gpio_isr_handler_add(BTN_1, touch_isr_handler, NULL);
+    gpio_isr_handler_add(BTN_1_PIN, touch_isr_handler, NULL);
 
 
     if (button_queue == NULL) {
@@ -775,7 +809,7 @@ void app_main()
     wifi_init_softap();
 
 	ESP_LOGI(TAG, "ESP32 ESP-IDF WebSocket Web Server is running ... ...\n");
-	initi_web_page_buffer();
+	init_web_page_buffer();
 	ESP_LOGI(TAG, "+++ +++ +++ +++  setup_websocket_server ... ... ... ...\n");
 	setup_websocket_server();
 

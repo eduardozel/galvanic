@@ -26,8 +26,7 @@ const rgb_t warm_white_steps[16] = {
 
 static const char *TAG = "ws2812";
 
-//#define RMT_LED_STRIP_GPIO_NUM      5
-int LED_STRIP_GPIO;
+gpio_num_t  LED_STRIP_GPIO;
 
 static int brightness = 4;
 

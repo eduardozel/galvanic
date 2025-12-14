@@ -84,7 +84,7 @@ TaskHandle_t profile_task_handle = NULL;
 
 
 int   current_duration = 5*60;
-int   total_seconds = 0;
+volatile uint32_t total_seconds = 0;
 int   brightness = 4;
 rgb_t custom_color;
 
@@ -109,6 +109,8 @@ void rainbow_task(void *arg) {
 
         vTaskDelay(pdMS_TO_TICKS( 1500));
     }
+	rainbow_active = false;
+    rainbow_task_handle = NULL;
     vTaskDelete(NULL);
 } // rainbow_task
 
@@ -121,9 +123,8 @@ void start_rainbow(void) {
 void stop_rainbow(void) {
     if (!rainbow_active) return;
     rainbow_active = false;
-    if (rainbow_task_handle != NULL) {
-        vTaskDelay(pdMS_TO_TICKS(200)); // Wait a bit for task to exit loop
-        rainbow_task_handle = NULL;
+    while (rainbow_task_handle != NULL) {
+      vTaskDelay(pdMS_TO_TICKS(10));
     }
 } // stop_rainbow
 /*==================*/
@@ -321,7 +322,7 @@ void lamp_settings_from_json(cJSON *json) {
 
 int lamp_settings_json(char *buffer, size_t size) {
     return snprintf(buffer, size,
-                    "{\"timer\": %d, \"red\": %d, \"green\": %d, \"blue\": %d, \"brightness\": %d, \"state\": %d}",
+                    "{\"timer\": %"PRIu32", \"red\": %d, \"green\": %d, \"blue\": %d, \"brightness\": %d, \"state\": %d}",
                     total_seconds, custom_color.red, custom_color.green, 
                     custom_color.blue, brightness, lamp_state);
 } // lamp_settings_json
