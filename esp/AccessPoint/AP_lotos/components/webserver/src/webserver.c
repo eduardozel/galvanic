@@ -422,7 +422,7 @@ esp_err_t not_found_handler(httpd_req_t *req) {
 void set_wifi_tx_power() {
     int8_t max_tx_power = 1; // 80 -> 20 dBm  ; 1 -> 0.25 dBm
     esp_wifi_set_max_tx_power(max_tx_power);
-}
+} // set_wifi_tx_power
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
@@ -440,83 +440,67 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     }
 } // wifi_event_handler
 
-
-void wifi_init_softap(void)
-{
-	set_wifi_tx_power();
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-
-    ap_netif = esp_netif_create_default_wifi_ap();
-    assert(ap_netif);	
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                        ESP_EVENT_ANY_ID,
-                                                        &wifi_event_handler,
-                                                        NULL,
-                                                        NULL));
-    wifi_config_t wifi_config = {0};
-/*!!!
-    wifi_config = {
-        .ap = {
-            .ssid_len = strlen(wifi_ssid),
-            .channel = wifi_channel,
-            .max_connection = EXAMPLE_MAX_STA_CONN,
-
-#ifdef CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
-            .authmode = WIFI_AUTH_WPA3_PSK,
-            .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
-#else
-            .authmode = WIFI_AUTH_WPA2_PSK,
-#endif
-            .pmf_cfg = {
-                    .required = true,
-            },
-        },
-    }; // wifi_config_t 
-	strncpy((char*)wifi_config.ap.ssid, wifi_ssid, sizeof(wifi_config.ap.ssid)-1);
-    wifi_config.ap.ssid[sizeof(wifi_config.ap.ssid) - 1] = '\0';
-	
-	strlcpy((char*)wifi_config.ap.password, wifi_password, sizeof(wifi_config.ap.password)-1);
-    wifi_config.ap.password[sizeof(wifi_config.ap.password) - 1] = '\0';
-
-ESP_LOGI(TAG, "wifi_init_softap ??????? SSID:%s<>password:%s<>channel:%d",
-             wifi_config.ap.ssid, wifi_config.ap.password, wifi_channel);
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20)); // ??
-    ESP_ERROR_CHECK(esp_wifi_start());
-*/
-/*
-    esp_netif_ip_info_t ip_info;
-    IP4_ADDR(&ip_info.ip, 192, 168, 4, 1);
-    IP4_ADDR(&ip_info.gw, 192, 168, 4, 1);
-    IP4_ADDR(&ip_info.netmask, 255, 255, 255, 0);
-    esp_netif_dhcps_stop(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"));
-    esp_netif_set_ip_info(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"), &ip_info);
-    esp_netif_dhcps_start(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"));
-*/
-
-//    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-//             wifi_ssid/*EXAMPLE_ESP_WIFI_SSID*/, wifi_password, wifi_channel);
-
-
-}
-
-
 //- - - - - -
-esp_err_t webserver_start(const webserver_ap_config_t *confg) {
-    static httpd_handle_t server = NULL;
+esp_err_t webserver_start(const webserver_ap_config_t *AP_cfg) {
+  if (!AP_cfg) {
+    ESP_LOGE(TAG, "Invalid config");
+    return ESP_ERR_INVALID_ARG;
+  }
+  ESP_LOGI(TAG, "---------------SSID>%s<password>%s", AP_cfg->ssid, AP_cfg->password);
+  set_wifi_tx_power();
+
+  ESP_ERROR_CHECK(esp_netif_init());
+  ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+  ap_netif = esp_netif_create_default_wifi_ap();
+  assert(ap_netif);	
+	
+  wifi_init_config_t wifi_init_cfg = WIFI_INIT_CONFIG_DEFAULT();
+  ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_cfg));
+  ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+  ESP_ERROR_CHECK(esp_event_handler_instance_register( WIFI_EVENT,
+                                                       ESP_EVENT_ANY_ID,
+                                                       &wifi_event_handler,
+ 													   NULL,
+ 													   NULL));
+
+   wifi_config_t wifi_cfg = {0};
+   size_t ssid_len = strlen(AP_cfg->ssid);
+   if (ssid_len == 0 || ssid_len > 32) {
+     ESP_LOGE(TAG, "Invalid SSID length");
+     return ESP_ERR_INVALID_ARG;
+   }
+   memcpy(wifi_cfg.ap.ssid, AP_cfg->ssid, ssid_len);
+   wifi_cfg.ap.ssid_len = ssid_len;
+
+   if ( strlen(AP_cfg->password) > 0) {
+        if (strlen(AP_cfg->password) < 8) {
+            ESP_LOGE(TAG, "Password too short (<8 chars)>%s<>%s", AP_cfg->password, AP_cfg->ssid);
+            return ESP_ERR_INVALID_ARG;
+        }
+        strncpy((char *)wifi_cfg.ap.password, AP_cfg->password, sizeof(wifi_cfg.ap.password) - 1);
+        wifi_cfg.ap.authmode = WIFI_AUTH_WPA2_PSK;
+   } else {
+        wifi_cfg.ap.authmode = WIFI_AUTH_OPEN;
+   }
+   ESP_LOGI(TAG, "SSID>%s<password>%s", AP_cfg->ssid, AP_cfg->password);
+
+   wifi_cfg.ap.channel = AP_cfg->channel;
+   wifi_cfg.ap.max_connection = AP_cfg->max_connections;
+   wifi_cfg.ap.pmf_cfg.required = false;
+
+   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_cfg));
+   ESP_ERROR_CHECK(esp_wifi_start());
+
+   ESP_LOGI(TAG, "SoftAP started: SSID='%s', channel=%d", AP_cfg->ssid, AP_cfg->channel);
+// - * - * - * - * 
+
+//    static httpd_handle_t server = NULL;
     if (server) return ESP_ERR_INVALID_STATE;
 
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    if (httpd_start(&server, &config) != ESP_OK) {
+    httpd_config_t httpd_cfg = HTTPD_DEFAULT_CONFIG();
+    if (httpd_start(&server, &httpd_cfg) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start HTTPD");
         return ESP_FAIL;
     }
@@ -536,5 +520,5 @@ esp_err_t webserver_start(const webserver_ap_config_t *confg) {
 
     ESP_LOGI(TAG, "Web server started on http://<ip>/");
     return ESP_OK;
-}
+} // webserver_start
 
