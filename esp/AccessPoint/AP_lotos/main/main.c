@@ -52,7 +52,7 @@ typedef enum {
 
 static const char *TAG = "AP lotos";
 
-static webserver_ap_config_t ap_cfg;
+static webserver_ap_config_t ap_cfg = {0};
 
 static int freqLED = 10000;
 static int led_state = 0;
@@ -132,21 +132,6 @@ void init_spiffs() {
         .format_if_mount_failed = true};
 
     ESP_ERROR_CHECK(esp_vfs_spiffs_register(&spiffs_conf));
-/*
-
-    // Инициализация SPIFFS
-    esp_vfs_spiffs_conf_t conf = {
-        .base_path = "/spiffs",
-        .partition_label = NULL,
-        .max_files = 5,
-        .format_if_mount_failed = true
-    };
-    esp_err_t ret = esp_vfs_spiffs_register(&conf);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to initialize SPIFFS (%s)", esp_err_to_name(ret));
-        return;
-    }
-*/
 }; // init_spiffs
 
 // --
@@ -197,9 +182,9 @@ esp_err_t read_lamp_config_from_file(void) {
     }
 
 
-    char wifi_ssid[32]     = {0};
-    char wifi_password[64] = {0};
-    int wifi_channel       = 6;
+    char    wifi_ssid[32]     = {0};
+    char    wifi_password[64] = {0};
+    uint8_t wifi_channel      = 6;
 
     char temp_ssid[32] = {0};
     if (fgets(temp_ssid, sizeof(temp_ssid), file) == NULL) {
@@ -209,6 +194,9 @@ esp_err_t read_lamp_config_from_file(void) {
     }
     temp_ssid[strcspn(temp_ssid, "\r")] = 0;
 	strcpy(wifi_ssid,     temp_ssid);
+    strcpy(ap_cfg.ssid,   temp_ssid);
+//    strncpy(ap_cfg.ssid, temp_ssid, sizeof(ap_cfg.ssid) - 1);
+//    ap_cfg.ssid[sizeof(ap_cfg.ssid) - 1] = '\0';
     ESP_LOGI(TAG, "Read SSID:%s<<!!!", wifi_ssid);
 
     char temp_password[64] = {0};
@@ -227,12 +215,11 @@ esp_err_t read_lamp_config_from_file(void) {
     wifi_channel = atoi(temp_chan);
     ESP_LOGI(TAG, "Read wifi_channel=%d", wifi_channel);
 
-    ap_cfg = (webserver_ap_config_t){
-        .ssid = wifi_ssid,
-        .password = wifi_password,
-        .channel = (uint8_t)wifi_channel,
-        .max_connections = 3
-    };
+    strncpy(ap_cfg.password, temp_password, sizeof(ap_cfg.password) - 1);
+    ap_cfg.password[sizeof(ap_cfg.password) - 1] = '\0';
+	ap_cfg.channel = wifi_channel;
+	ap_cfg.max_connections = 3;
+
 
     char led_str[8] = {0};
     if (!fgets(led_str, sizeof(led_str), file)) goto fail;
