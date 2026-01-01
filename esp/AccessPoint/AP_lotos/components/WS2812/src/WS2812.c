@@ -118,11 +118,11 @@ rgb_t hsv2rgb(float h, float s, float v) {
     }
     
     rgb_t color;
-    color.red = (uint8_t)((rp + m) * 255);
+    color.red   = (uint8_t)((rp + m) * 255);
     color.green = (uint8_t)((gp + m) * 255);
-    color.blue = (uint8_t)((bp + m) * 255);
+    color.blue  = (uint8_t)((bp + m) * 255);
     return color;
-}
+} // hsv2rgb
 
 void initWS2812()
 {
@@ -151,7 +151,7 @@ void initWS2812()
 	tx_config = (rmt_transmit_config_t) {
         .loop_count = 0, // no transfer loop
     };
-}
+} // initWS2812
 
 void offAllLED( )
 {
@@ -161,7 +161,7 @@ void offAllLED( )
 //	vTaskDelay(pdMS_TO_TICKS(EXAMPLE_CHASE_SPEED_MS));
 } // offAllLED
 
-void setAllLED_rgb( uint32_t red, uint32_t green, uint32_t blue )
+void setAllLED_rgb( uint8_t red, uint8_t green, uint8_t blue )
 {
 	for (int j = 0; j < MAX_LED_NUMBERS; j ++) {
 //	            led_strip_hsv2rgb(hue, 100, 100, &red, &green, &blue);

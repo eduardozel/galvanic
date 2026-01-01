@@ -84,7 +84,7 @@ TaskHandle_t profile_task_handle = NULL;
 
 
 int   current_duration = 5*60;
-volatile uint32_t total_seconds = 0;
+volatile int total_seconds = 0;
 int   brightness = 4;
 rgb_t custom_color;
 
@@ -256,7 +256,6 @@ void process_color_component(cJSON *json, const char *field_name, uint8_t *color
 } // process_color_component
 
 void lamp_settings_from_json(cJSON *json) {
-    // Обработка длительности
     cJSON *duration_item = cJSON_GetObjectItem(json, "duration");
     if (duration_item != NULL) {
         if (cJSON_IsNumber(duration_item)) {
@@ -272,16 +271,11 @@ void lamp_settings_from_json(cJSON *json) {
     cJSON *mode_item = cJSON_GetObjectItem(json, "mode");
     if (mode_item != NULL && mode_item->type == cJSON_String) {
         const char *mode = mode_item->valuestring;
-        if (strcmp(mode, "white") == 0) {
-            lamp_state = white;
-        } else if (strcmp(mode, "custom") == 0) {
-            lamp_state = custom;
-        } else if (strcmp(mode, "rainbow") == 0) {
-            lamp_state = rainbow;
-        } else if (strcmp(mode, "profile") == 0) {
-            lamp_state = profile;
-        } else if (strcmp(mode, "profileN") == 0) {
-            lamp_state = profileN;
+        if        (strcmp(mode, "white")    == 0) { lamp_state = white;
+        } else if (strcmp(mode, "custom")   == 0) { lamp_state = custom;
+        } else if (strcmp(mode, "rainbow")  == 0) { lamp_state = rainbow;
+        } else if (strcmp(mode, "profile")  == 0) { lamp_state = profile;
+        } else if (strcmp(mode, "profileN") == 0) { lamp_state = profileN;
         } else {
             ESP_LOGE(TAG, "Unknown mode: %s", mode);
         }
@@ -322,7 +316,7 @@ void lamp_settings_from_json(cJSON *json) {
 
 int lamp_settings_json(char *buffer, size_t size) {
     return snprintf(buffer, size,
-                    "{\"timer\": %"PRIu32", \"red\": %d, \"green\": %d, \"blue\": %d, \"brightness\": %d, \"state\": %d}",
+                    "{\"timer\": %d, \"red\": %d, \"green\": %d, \"blue\": %d, \"brightness\": %d, \"state\": %d}",
                     total_seconds, custom_color.red, custom_color.green, 
                     custom_color.blue, brightness, lamp_state);
 } // lamp_settings_json
@@ -346,13 +340,16 @@ bool load_led_states_from_cfg(void) {
 
     int tmp1 = 0;
     int tmp2 = 0;
+    int tmp3 = 0;
+    int tmp4 = 0;
+
 //    if (fscanf(f, "%d\n", &led_states_count) != 1) {
-	 if (fscanf(f, "%d,%d,%d;", &led_states_count, &tmp1, &tmp2) != 3) {
+	 if (fscanf(f, "%d,%d,%d,%d,%d;", &led_states_count, &tmp1, &tmp2, &tmp3, &tmp4) != 5) {
         ESP_LOGE(TAG, "Failed to read states count");
         fclose(f);
         return false;
     }
-    ESP_LOGI(TAG, "Parsed values: count=%d, tmp1=%d, tmp2=%d", led_states_count, tmp1, tmp2);
+    ESP_LOGI(TAG, "Parsed values: count=%d, tmp1=%d, tmp2=%d, tmp3=%d, tmp4=%d", led_states_count, tmp1, tmp2, tmp3, tmp4);
 
     if (led_states_count <= 0) {
         ESP_LOGE(TAG, "Invalid states count: %d", led_states_count);

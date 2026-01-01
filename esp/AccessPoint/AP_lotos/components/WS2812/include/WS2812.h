@@ -24,7 +24,7 @@ extern led_state_t *led_states;
 extern gpio_num_t LED_STRIP_GPIO;
 
 void initWS2812( void );
-void setAllLED_rgb( uint32_t red, uint32_t green, uint32_t blue ); // uint8_t
+void setAllLED_rgb( uint8_t red, uint8_t green, uint8_t blue ); // uint8_t uint32_t
 void setAllLED( rgb_t color );
 void setProfileN( int prfl );
 void offAllLED( void );
