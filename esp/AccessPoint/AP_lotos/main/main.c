@@ -1,65 +1,58 @@
+// 
+// esp32c3 esp-idf v 5.5.1
 //
 // main.c
-// esp-idf v 5.5.1
 //
 #include <stdio.h>
-#include <string.h>
-
-#include "lamp.h"
-#include "esp_log.h"
-
-#include "webserver.h"
-
 #include <stdlib.h>
-#include <math.h>
 
 #include <inttypes.h>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_system.h"
-
-#include "spi_flash_mmap.h"
-#include "esp_spiffs.h"
-
-#include "nvs_flash.h"
-
-/*
-#include <esp_http_server.h>
-#include "esp_mac.h"
-#include "esp_wifi.h"
-#include "esp_event.h"
-
-*/
-
-#include "lwip/err.h"
-#include "lwip/sys.h"
+#include <string.h>
 
 #include "driver/gpio.h"
 
 
-static gpio_num_t BTN_1_PIN;
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#include "esp_log.h"
+#include "esp_system.h"
+
+#include "esp_spiffs.h"
+#include "spi_flash_mmap.h"
+
+#include "nvs_flash.h"
+#include "esp_timer.h"
+
+#include "lamp.h"
+#include "webserver.h"
+
+
+static const char *TAG = "AP lotos";
+
 
 #define LED_PIN 8
 #define led_on  0
 #define led_off 1
-
-static QueueHandle_t button_queue;
-typedef enum {
-    EVENT_BUTTON_1,   // Событие от TTP223_1
-    EVENT_BUTTON_2    // Событие от TTP223_2
-} button_event_t;
-
-static const char *TAG = "AP lotos";
-
-static webserver_ap_config_t ap_cfg = {0};
-
 static int freqLED = 10000;
 static int led_state = 0;
 
-static const int tick = 10;
+static gpio_num_t BTN_1_PIN;
 
-//static char response_data[8192+4096];
+typedef enum {
+    EVENT_BUTTON_1,   // TTP223_1
+    EVENT_BUTTON_2    // TTP223_2
+} button_event_t;
+
+static QueueHandle_t button_queue;
+
+
+static webserver_ap_config_t ap_cfg = {0};
+
+
+#define SECONDS_PER_TICK 10
+
 /***********************/
 
 static void IRAM_ATTR touch_isr_handler(void* arg) {
@@ -67,32 +60,61 @@ static void IRAM_ATTR touch_isr_handler(void* arg) {
     button_event_t event = EVENT_BUTTON_1;
     xQueueSendFromISR( button_queue, &event, &higher_priority_task_woken);
     portYIELD_FROM_ISR(higher_priority_task_woken);
-}
+} // touch_isr_handler
 
 static void touch_task(void* arg) {
+    const uint64_t hold_time_us = 2 * 1000000ULL; // 2 second
+    const TickType_t poll_delay = pdMS_TO_TICKS( 50);
     button_event_t event;
-//    static uint64_t last_time_on = 0;   // Для debounce TTP223
-//    static uint64_t last_time_off = 0;  // Для debounce  OFF
 
     while (1) {
         if (xQueueReceive(button_queue, &event, portMAX_DELAY)) {
-            switch (event) {
-                case EVENT_BUTTON_1:
-                  ESP_LOGI(TAG, "Touch button1 detected");
-                  if (!LAMP_on) {
-                    LAMP_turn_On();
-                  } else {
-				    LAMP_turn_Off();
-                  } // if LAMP_on
-                  break;
-                default:
-                    ESP_LOGW(TAG, "Неизвестное событие: %d", event);
-                    break;
-            }; // switch 
-        } // if
-    } // while
-}
+            if (event == EVENT_BUTTON_1) {
+                ESP_LOGI(TAG, "Touch button1 detected (edge)");
 
+                // Запомнить момент начала удержания (ISR был по фронту, но пин должен быть 1)
+                uint64_t start = esp_timer_get_time();
+
+                // Ожидаем либо отпускания, либо достижения времени удержания
+                bool held_long_enough = false;
+                while (1) {
+                    int level = gpio_get_level(BTN_1_PIN);
+                    if (level == 0) {
+                        held_long_enough = false;
+                        break;
+                    }
+                    if ((esp_timer_get_time() - start) >= hold_time_us) {
+                        held_long_enough = true;
+                        break;
+                    }
+                    vTaskDelay(poll_delay);
+                }
+
+                if (held_long_enough) {
+                    ESP_LOGI(TAG, "Button held >= 3s, toggling lamp");
+                    if (!LAMP_on) {
+                        LAMP_turn_On();
+                    } else {
+                        LAMP_turn_Off();
+                    }
+
+                    // Ждём полного отпускания, чтобы не срабатывать повторно на одном удержании
+                    while (gpio_get_level(BTN_1_PIN) == 1) {
+                        vTaskDelay(poll_delay);
+                    }
+                    // небольшая стабилизация после отпускания (debounce)
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                } else {
+                    ESP_LOGI(TAG, "Button released before 3s - ignored");
+                    // можно добавить небольшую задержку для дебаунса
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                }
+            } else {
+                ESP_LOGW(TAG, "Неизвестное событие: %d", event);
+            }
+        }
+    }
+} // touch_task
 /* * * * * * */
 void task_blink_led(void *arg) {
     while (1) {
@@ -110,17 +132,21 @@ static void init_led(){
     xTaskCreate(&task_blink_led, "BlinkLed",  2048, NULL, 5, NULL);
 } // init_led
 
-// * * * * *
-
 //  / * / * / *
 void lamp_timeout_task(void *arg) {
+	const TickType_t xFrequency = ( SECONDS_PER_TICK * 1000 ) / portTICK_PERIOD_MS;
     while (1) {
-//      if ( total_seconds > 0 ) {
-		if        ( total_seconds   > tick ) { total_seconds -= tick;
-		} else if ( total_seconds  == tick ) { LAMP_turn_Off();
-		}
-//      } // if 
-		vTaskDelay( 10000 / portTICK_PERIOD_MS);
+      if ( total_seconds > 0 ) {
+        if  ( total_seconds   > SECONDS_PER_TICK ) { 
+          total_seconds -= SECONDS_PER_TICK;
+        } else { 
+          total_seconds  = 0;
+          LAMP_turn_Off();
+        }; // if
+      } else if ( total_seconds < 0 ) {
+        total_seconds = 0;
+      } // if 
+      vTaskDelay( xFrequency );
     } // while
 } // lamp_timeout_task
 
@@ -181,11 +207,6 @@ esp_err_t read_lamp_config_from_file(void) {
         return ESP_FAIL;
     }
 
-
-    char    wifi_ssid[32]     = {0};
-    char    wifi_password[64] = {0};
-    uint8_t wifi_channel      = 6;
-
     char temp_ssid[32] = {0};
     if (fgets(temp_ssid, sizeof(temp_ssid), file) == NULL) {
         ESP_LOGE(TAG, "Failed to read SSID");
@@ -193,11 +214,10 @@ esp_err_t read_lamp_config_from_file(void) {
         return ESP_FAIL;
     }
     temp_ssid[strcspn(temp_ssid, "\r")] = 0;
-	strcpy(wifi_ssid,     temp_ssid);
     strcpy(ap_cfg.ssid,   temp_ssid);
 //    strncpy(ap_cfg.ssid, temp_ssid, sizeof(ap_cfg.ssid) - 1);
 //    ap_cfg.ssid[sizeof(ap_cfg.ssid) - 1] = '\0';
-    ESP_LOGI(TAG, "Read SSID:%s<<!!!", wifi_ssid);
+    ESP_LOGI(TAG, "Read SSID:%s<<!!!", ap_cfg.ssid);
 
     char temp_password[64] = {0};
     if (fgets(temp_password, sizeof(temp_password), file) == NULL) {
@@ -206,20 +226,19 @@ esp_err_t read_lamp_config_from_file(void) {
         return ESP_FAIL;
     }
     temp_password[strcspn(temp_password, "\r")] = 0;
-	strcpy(wifi_password, temp_password);
-    ESP_LOGI(TAG, "Read Password: %s<<!!!", wifi_password);
+	strcpy(ap_cfg.password, temp_password);
+//    strncpy(ap_cfg.password, temp_password, sizeof(ap_cfg.password) - 1);
+//    ap_cfg.password[sizeof(ap_cfg.password) - 1] = '\0';
+    ESP_LOGI(TAG, "Read Password: %s<<!!!", ap_cfg.password);
 
+    uint8_t wifi_channel      = 6;
     char temp_chan[8] = {0};
     if (!fgets(temp_chan, sizeof(temp_chan), file)) goto fail;
     temp_chan[strcspn(temp_chan, "\r\n")] = '\0';
-    wifi_channel = atoi(temp_chan);
+	ap_cfg.channel = atoi(temp_chan);
     ESP_LOGI(TAG, "Read wifi_channel=%d", wifi_channel);
 
-    strncpy(ap_cfg.password, temp_password, sizeof(ap_cfg.password) - 1);
-    ap_cfg.password[sizeof(ap_cfg.password) - 1] = '\0';
-	ap_cfg.channel = wifi_channel;
 	ap_cfg.max_connections = 3;
-
 
     char led_str[8] = {0};
     if (!fgets(led_str, sizeof(led_str), file)) goto fail;
