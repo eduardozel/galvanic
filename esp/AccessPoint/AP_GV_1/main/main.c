@@ -1,3 +1,7 @@
+// esp32c3 esp-idf v 5.5.1
+//
+// main.c
+//
 #include <stdio.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,14 +69,7 @@
 // https://docs.espressif.com/projects/esp-idf/en/v5.3.1/esp32/api-reference/peripherals/adc_oneshot.html
 // https://espressif-docs.readthedocs-hosted.com/projects/arduino-esp32/en/latest/api/adc.html
 
-
-
-//#define EXAMPLE_ESP_WIFI_SSID      "galvanica" // CONFIG_ESP_WIFI_SSID
-//#define EXAMPLE_ESP_WIFI_PASS      "gvc123456" // CONFIG_ESP_WIFI_PASSWORD
-
 #define EXAMPLE_MAX_STA_CONN       3 // CONFIG_ESP_MAX_STA_CONN
-
-
 
 httpd_handle_t server = NULL;
 struct async_resp_arg {
@@ -98,12 +95,19 @@ static const int tick = 10;
 
 #define INDEX_HTML_PATH "/spiffs/start.html"
 #define STYLE_CSS_PATH  "/spiffs/styles.css"
+#define VALUES_PATH     "/spiffs/values.cfg"
 
-static char index_html[8192+4096];
+static char index_html[8192+4096+1024];
 char style_css[2048];
 
 static char response_data[8192+4096];
 
+
+#define MAX_VALUES 3 // 11
+#define DISPLAY_STR_LEN 8
+static uint8_t     Hvalues[MAX_VALUES]  = {   7,     8,     9};  // {0};
+static char Hdisplay_buf[MAX_VALUES][DISPLAY_STR_LEN] = {{0}};
+static const char *Hdisplay[MAX_VALUES] = {"1.4", "1.6", "1.8"}; // {""};
 
 static void IRAM_ATTR bd_isr_handler(void* arg) {
     DS1803_set( 1, 0);
@@ -217,7 +221,7 @@ void init_spiffs() {
 static void initi_web_page_buffer(void)
 {
     memset((void *)index_html, 0, sizeof(index_html));
-	memset((void *)style_css,  0, sizeof(style_css));
+    memset((void *)style_css,  0, sizeof(style_css));
     struct stat st;
     if (stat(INDEX_HTML_PATH, &st))
     {
@@ -274,6 +278,34 @@ static esp_err_t get_req_handler(httpd_req_t *req) {
     httpd_resp_send(req, index_html, HTTPD_RESP_USE_STRLEN);
     return ESP_OK;
 }
+
+
+static esp_err_t config_values_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "Sending config values+++++++++++++++++++++++++++++++++++++");
+    
+    char json_buf[512];
+    int  offset = 0;
+    
+    offset += snprintf(json_buf + offset, sizeof(json_buf) - offset, 
+                       "{\"values\":[");
+    
+    for (int i = 0; i < MAX_VALUES; i++) {
+        offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+                           "%u%s", Hvalues[i], (i < MAX_VALUES - 1) ? "," : "");
+    } // for
+    offset += snprintf(json_buf + offset, sizeof(json_buf) - offset, 
+                       "],\"display\":[");
+    
+    for (int i = 0; i < MAX_VALUES; i++) {
+        offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+                           "\"%s\"%s", Hdisplay[i], (i < MAX_VALUES - 1) ? "," : "");
+    } // for
+    offset += snprintf(json_buf + offset, sizeof(json_buf) - offset, "]}");
+
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, json_buf, HTTPD_RESP_USE_STRLEN);
+} // config_values_handler
+
 
 /*
 esp_err_t get_req_handler(httpd_req_t *req)
@@ -459,28 +491,38 @@ httpd_handle_t setup_websocket_server(void)
         .uri = "/",
         .method = HTTP_GET,
         .handler = get_req_handler,
-        .user_ctx = NULL};
+        .user_ctx = NULL
+    };
 
     httpd_uri_t ws = {
         .uri = "/ws",
         .method = HTTP_GET,
         .handler = handle_ws_req,
         .user_ctx = NULL,
-        .is_websocket = true};
+        .is_websocket = true
+    };
 		
-	httpd_uri_t style_uri = {
-		.uri = "/styles.css",
-		.method = HTTP_GET,
-		.handler = style_handler,
-		.user_ctx = NULL
-	};
+    httpd_uri_t style_uri = {
+      .uri = "/styles.css",
+      .method = HTTP_GET,
+      .handler = style_handler,
+      .user_ctx = NULL
+    };
 
-    if (httpd_start(&server, &config) == ESP_OK)
-    {
+    httpd_uri_t config_uri = {
+        .uri = "/config_values",
+        .method = HTTP_GET,
+        .handler = config_values_handler,
+        .user_ctx = NULL
+    };
+
+
+    if (httpd_start(&server, &config) == ESP_OK) {
         httpd_register_uri_handler(server, &uri_get);
         httpd_register_uri_handler(server, &ws);
-		httpd_register_uri_handler(server, &style_uri);
-   }
+        httpd_register_uri_handler(server, &style_uri);
+        httpd_register_uri_handler(server, &config_uri); 
+    }
 
     return server;
 } // setup_websocket_server
@@ -489,6 +531,64 @@ void set_wifi_tx_power() {
     int8_t max_tx_power = 1; // 80 -> 20 dBm  ; 1 -> 0.25 dBm
     esp_wifi_set_max_tx_power(max_tx_power);
 }
+// * * * *  * * 
+/*
+
+void read_config_values(void) {
+    FILE *f = fopen(VALUES_PATH, "r");
+    if (f == NULL) {
+        ESP_LOGW(TAG, "File not found: %s, using defaults", VALUES_PATH);
+        
+        for (int i = 0; i < MAX_VALUES; i++) {
+            Hvalues[i] = (uint8_t)i;
+            snprintf(Hdisplay_buf[i], DISPLAY_STR_LEN, "%.1f", i * 0.2f);
+            Hdisplay[i] = Hdisplay_buf[i];
+        }
+        return;
+    }
+    
+    char line[256];
+    
+    // Hvalues 
+    if (fgets(line, sizeof(line), f) != NULL) {
+        if (line[0] != '#') {
+            char *token = strtok(line, ",");
+            int idx = 0;
+            while (token != NULL && idx < MAX_VALUES) {
+                Hvalues[idx] = (uint8_t)atoi(token);
+                ESP_LOGD(TAG, "Hvalues[%d] = %d", idx, Hvalues[idx]);
+                token = strtok(NULL, ",");
+                idx++;
+            }
+        }
+    }
+    
+    // Hdisplay
+    if (fgets(line, sizeof(line), f) != NULL) {
+        if (line[0] != '#') {
+            char *token = strtok(line, ",");
+            int idx = 0;
+            while (token != NULL && idx < MAX_VALUES) {
+                token[strcspn(token, "\r\n")] = '\0';
+                
+                strncpy(Hdisplay_buf[idx], token, DISPLAY_STR_LEN - 1);
+                Hdisplay_buf[idx][DISPLAY_STR_LEN - 1] = '\0';
+                
+                Hdisplay[idx] = Hdisplay_buf[idx];
+                
+                ESP_LOGD(TAG, "Hdisplay[%d] = \"%s\"", idx, Hdisplay[idx]);
+                token = strtok(NULL, ",");
+                idx++;
+            }
+        }
+    }
+    
+    fclose(f);
+    ESP_LOGI(TAG, "Loaded %d values from %s", MAX_VALUES, VALUES_PATH);
+    
+
+}
+*/
 
 // --
 // esp_err_t read_wifi_config(void) 
