@@ -1,12 +1,11 @@
 <!DOCTYPE HTML>
-<!DOCTYPE HTML>
 <html>
 
 <head>
-    <title>Galvanyzer Server v 1.01</title>
+    <title>Galvanyzer Server v 1.03</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" href="data:,">
-	<link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css">
     <style>
         html {
             font-family: New Times Roman;
@@ -14,8 +13,11 @@
         }
 
         h1 {
-            font-size: 1.8rem;
+            font-size: 15px;
             color: white;
+            margin: 0;
+            line-height: 1.2;
+            padding: 3px 0;
         }
 
         .topnav {
@@ -166,7 +168,7 @@
 
 <body>
     <div class="topnav">
-        <h1>Galvanyzer Server v 1.01</h1>
+        <h1>Galvanyzer Server v 1.03</h1>
     </div>
     <script>
         var gateway = `ws://${window.location.hostname}/ws`;
@@ -186,38 +188,68 @@
             console.log('Connection closed');
             setTimeout(initWebSocket, 2000);
         }
+
         function onMessage(event) {
             console.log(event.data);
-			var data = JSON.parse(event.data);
+            var data = JSON.parse(event.data);
             document.getElementById('v1').innerText = data.v1;
             document.getElementById('v2').innerText = data.v2;
 
             document.getElementById('c1').innerText = data.c1;
             document.getElementById('c2').innerText = data.c2;
 
-			const cnt1 = data.timer1;
-			if ( cnt1 > 0 ) {
-				const min1 = Math.floor( cnt1 / 60);
-				const sec1 = cnt1 - min1 * 60;
-				document.getElementById('counter1').innerText = min1 + ':' + String(sec1).padStart(2, '0');
-			} else {
-				document.getElementById('counter1').innerText = '- - -';
-			}
-			const cnt2 = data.timer2;
-			if ( cnt2 > 0 ) {
-				const cnt2 = data.timer2;
-				const min2 = Math.floor( cnt2 / 60);
-				const sec2 = cnt2 - min2 * 60;
-				document.getElementById('counter2').innerText = min2 + ':' + String(sec2).padStart(2, '0');;
-			} else {
-				document.getElementById('counter2').innerText = '- - -';
-			}
-        }
+            const cnt1 = data.timer1;
+            if ( cnt1 > 0 ) {
+              const min1 = Math.floor( cnt1 / 60);
+              const sec1 = cnt1 - min1 * 60;
+              document.getElementById('counter1').innerText = min1 + ':' + String(sec1).padStart(2, '0');
+            } else {
+              document.getElementById('counter1').innerText = '- - -';
+            }
+            const cnt2 = data.timer2;
+            if ( cnt2 > 0 ) {
+              const cnt2 = data.timer2;
+              const min2 = Math.floor( cnt2 / 60);
+              const sec2 = cnt2 - min2 * 60;
+              document.getElementById('counter2').innerText = min2 + ':' + String(sec2).padStart(2, '0');;
+            } else {
+              document.getElementById('counter2').innerText = '- - -';
+            }
+        } // onMessage
+
+        function loadCOMBOValues(
+        ) {
+          fetch('/config_values')
+            .then(response => {
+              if (!response.ok) throw new Error('HTTP ' + response.status);
+              return response.json();
+            })
+            .then(data => {
+              const val1 = document.getElementById('val1');
+              const val2 = document.getElementById('val2');
+            
+              for (let i = 0; i < data.values.length; i++) {
+                  const opt1 = document.createElement('option');
+                  opt1.value = data.values[i];
+                  opt1.text  = data.display[i];
+                  val1.add(opt1);
+                  
+                  const opt2 = document.createElement('option');
+                  opt2.value = data.values[i];
+                  opt2.text  = data.display[i];
+                  val2.add(opt2);
+              }; // for
+
+            })  // .then(data
+          ; // fetch
+        } // loadCOMBOValues
+
         function onLoad(event) {
             initWebSocket();
             initButton();
+            loadCOMBOValues();
             setInterval(getState, 10000);
-		}
+        } // onLoad
 
         function getState() {
             websocket.send(JSON.stringify({ act: 'getState'}));
@@ -318,23 +350,17 @@
         <option value= "4">0.8</option>
         <option value= "5">1.0</option>
         <option value= "6">1.2</option>
-        <option value= "7">1.4</option>
-        <option value= "8">1.6</option>
-        <option value= "9">1.8</option>
 	</select>
 </td>
 <td>
     <select id="val2" class = "combo">
-        <option value="0">off</option>
+        <option value= "0">off</option>
         <option value= "1">0.2</option>
         <option value= "2">0.4</option>
         <option value= "3">0.6</option>
         <option value= "4">0.8</option>
         <option value= "5">1.0</option>
         <option value= "6">1.2</option>
-        <option value= "7">1.4</option>
-        <option value= "8">1.6</option>
-        <option value= "9">1.8</option>
     </select>
 </td>
 </tr>
@@ -355,6 +381,20 @@
 </td>
 </tr>
 </table>
+
+<div style="margin-top:20px; padding:10px; border-top:1px solid #ccc;">
+    <h3>load config</h3>
+    <input type="file" 
+       id="cfgFile" 
+       title="*.cfg"
+       style="margin:5px 0;"
+    >
+    <br>
+    <button id="uploadBtn" class="btnStart" style="padding:10px 30px; font-size:14px;">
+        load data
+    </button>
+    <span id="uploadStatus" style="margin-left:10px; font-size:14px;"></span>
+</div>
 </body>
 
 </html>
