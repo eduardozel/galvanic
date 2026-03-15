@@ -1,3 +1,7 @@
+// esp32c3 esp-idf v 5.5.1
+//
+// DS1803.c
+//
 #include "DS1803.h"
 
 #include "esp_spiffs.h"
@@ -55,7 +59,14 @@ static esp_err_t i2c_master_init(void)
 
 static esp_err_t i2c_master_send(uint8_t message[], int len)
 {
-    ESP_LOGI(TAG, "Sending Message = %s", message);   
+    if (len >= 2) {
+        ESP_LOGI(TAG, "message: 0x%02X, %d", message[0], message[1]);
+    } else if (len == 1) {
+        ESP_LOGI(TAG, "message: 0x%02X", message[0]);
+    }
+    if (len > 2) {
+        ESP_LOG_BUFFER_HEX(TAG, message + 2, len - 2);
+    }
     
     esp_err_t ret; 
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();    
@@ -76,8 +87,8 @@ void DS1803_set( uint8_t chn, uint8_t idx )
   const uint8_t  CMD_POTb = 0xAF;
   uint8_t  msg[2];
   
-  if        ( 1 == chn) { msg[0] = CMD_POT1; msg[1] = values1[idx]; ESP_LOGI(TAG, "Sending Message >CMD_POT1");
-  } else if ( 0 == chn) { msg[0] = CMD_POT0; msg[1] = values0[idx]; ESP_LOGI(TAG, "Sending Message >CMD_POT0");
+  if        ( 1 == chn) { msg[0] = CMD_POT1; msg[1] = values1[idx]; ESP_LOGI(TAG, "Sending to >CMD_POT1");
+  } else if ( 0 == chn) { msg[0] = CMD_POT0; msg[1] = values0[idx]; ESP_LOGI(TAG, "Sending to >CMD_POT0");
   } else {                                   ESP_LOGI(TAG, "Sending Message >CMD_???");
   }
   i2c_master_send( msg, 2);

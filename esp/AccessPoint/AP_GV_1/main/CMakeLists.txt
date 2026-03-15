@@ -1,5 +1,7 @@
 set(srcs "main.c"
-	     "DS1803.c")
+         "DS1803.c"
+         "webserver.c"
+         "GV.c")
 idf_component_register(SRCS ${srcs}
                     INCLUDE_DIRS ".")
 
