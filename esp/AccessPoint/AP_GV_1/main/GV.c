@@ -6,34 +6,99 @@
 #include "DS1803.h"
 #include "GV.h"
 
-//#include "esp_adc/adc_oneshot.h"
-
 volatile int total_seconds[2];
 
+static const char *TAG = "ADC";
+static adc_oneshot_unit_handle_t adc1_handle = NULL;
 
-void ADC_init(
-) {
-    adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC_v1, ADC_ATTEN_DB_11); // ADC_ATTEN_DB_11 0 mV ~ 2500 mV;  ADC_ATTEN_DB_6 0 mV ~ 1300 mV -- ADC_ATTEN_DB_12
-    adc1_config_channel_atten(ADC_v2, ADC_ATTEN_DB_11);
-    adc1_config_channel_atten(ADC_c1, ADC_ATTEN_DB_0);  // ADC_ATTEN_DB_0 0 mV ~ 750 mV
-    adc1_config_channel_atten(ADC_c2, ADC_ATTEN_DB_0);
+void ADC_init(void) {
+    esp_err_t ret;
+    
+    adc_oneshot_unit_init_cfg_t init_config = {
+        .unit_id = ADC_UNIT_1,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
+    };
+    
+    ret = adc_oneshot_new_unit(&init_config, &adc1_handle);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "ADC1 unit init failed: %s", esp_err_to_name(ret));
+        return;
+    }
+    
+    adc_oneshot_chan_cfg_t chan_config = {
+        .atten = ADC_ATTEN_DB_12,      // Диапазон ~0–2500 мВ
+        .bitwidth = ADC_BITWIDTH_12,   // 12 бит (0–4095)
+    };
+    
+    // === Настройка каналов напряжения (высокое усиление) ===
+    ret = adc_oneshot_config_channel(adc1_handle, ADC_v1, &chan_config);
+    if (ret != ESP_OK) ESP_LOGE(TAG, "ADC_v1 config failed");
+    
+    ret = adc_oneshot_config_channel(adc1_handle, ADC_v2, &chan_config);
+    if (ret != ESP_OK) ESP_LOGE(TAG, "ADC_v2 config failed");
+    
+    // === Настройка каналов тока (низкое усиление, 0–750 мВ) ===
+    chan_config.atten = ADC_ATTEN_DB_0;  // Диапазон ~0–750 мВ
+    
+    ret = adc_oneshot_config_channel(adc1_handle, ADC_c1, &chan_config);
+    if (ret != ESP_OK) ESP_LOGE(TAG, "ADC_c1 config failed");
+    
+    ret = adc_oneshot_config_channel(adc1_handle, ADC_c2, &chan_config);
+    if (ret != ESP_OK) ESP_LOGE(TAG, "ADC_c2 config failed");
+    
+    ESP_LOGI(TAG, "ADC initialized successfully");
 }
 
-uint32_t get_ADC( uint8_t channel
-) {
-  uint32_t tmp = adc1_get_raw(channel);   // int analogVolts = analogReadMilliVolts(2);
-  return 1;
-}; // get_ADC
+uint32_t get_ADC(uint8_t channel) {
+    if (!adc1_handle) {
+        ESP_LOGE(TAG, "ADC not initialized");
+        return 0;
+    }
+    
+    int raw_value = 0;
+    esp_err_t ret = adc_oneshot_read(adc1_handle, (adc_channel_t)channel, &raw_value);
+    
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "ADC read failed: %s", esp_err_to_name(ret));
+        return 0;
+    }
+    
+    return (uint32_t)raw_value;  // 0–4095
+}
 
-void STOP( uint8_t ch ){
+uint32_t get_ADC_avg( uint8_t channel
+                    , uint8_t samples
+) {
+    if (samples == 0) samples = 1;
+    if (samples > 32) samples = 32;
+    
+    uint32_t sum = 0;
+    for (uint8_t i = 0; i < samples; i++) {
+        sum += get_ADC(channel);
+        esp_rom_delay_us(100);
+    }
+    
+    return sum / samples;
+} // get_ADC_avg
+
+void ADC_deinit(void
+) {
+    if (adc1_handle) {
+        adc_oneshot_del_unit(adc1_handle);
+        adc1_handle = NULL;
+        ESP_LOGI(TAG, "ADC deinitialized");
+    }
+} // ADC_deinit
+
+void STOP( uint8_t ch 
+){
 	total_seconds[ch]= 0;
     if ( 0 == ch ) {
       DS1803_set( 1, 0);
 	} else {
       DS1803_set( 0, 0);
 	}
-}
+} // STOP
 
 /*
 static void init_sound(void)
