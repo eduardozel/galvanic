@@ -3,9 +3,7 @@
 // DS1803.c
 //
 #include "DS1803.h"
-
-#include "esp_spiffs.h"
-
+#include "config.h"
 
 static const char *TAG = "DS1803";
 
@@ -27,16 +25,15 @@ static const char *TAG = "DS1803";
 
 static const int i2c_master_port = 0;
 
-#define VALUES_PATH "/spiffs/values.cfg"
-#define MAX_VALUES 11
+
 /*
 static uint8_t  values0[MAX_VALUES] = { 0x00, 0x07, 0x09, 0x10, 0x19, 0x21, 0x2D, 0x3A, 0x48, 0x5C, 0x6A }; // top
 static uint8_t  values1[MAX_VALUES] = { 0x00, 0x07, 0x0C, 0x12, 0x18, 0x23, 0x2E, 0x3A, 0x44, 0x5A, 0x65 }; // bottom
 
                                      0.1   0.2   0.4   0.6   0.8   1.0   1.2   1.4   1.6   1.8 
 */
-static uint8_t  values0[MAX_VALUES] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // top
-static uint8_t  values1[MAX_VALUES] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // bottom
+uint8_t  values0[MAX_VALUES] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // top
+uint8_t  values1[MAX_VALUES] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }; // bottom
 
 static esp_err_t i2c_master_init(void)
 {
@@ -94,50 +91,12 @@ void DS1803_set( uint8_t chn, uint8_t idx )
   i2c_master_send( msg, 2);
 } // DS1803_set
 
-void read_values() {
-    uint8_t  value;
-
-    FILE *f = fopen(VALUES_PATH, "r");
-    if (f == NULL) {
-        ESP_LOGE(TAG, "Failed to open file %s for reading", VALUES_PATH);
-        return;
-    }
-    char line[128];
-    uint8_t ln = 0;
-    fgets(line, sizeof(line), f);
-	fgets(line, sizeof(line), f);
-    while (fgets(line, sizeof(line), f) != NULL && ln < 2) {
-        char *token = strtok(line, ",");
-        uint8_t vn = 0;
-        while (token != NULL && vn < MAX_VALUES) {
-			value = (uint8_t)atoi(token);
-            if        ( 0 == ln ) { values0[vn] = value;
-			} else if ( 1 == ln ) { values1[vn] = value;
-			}
-            token = strtok(NULL, ",");
-            vn++;
-        } // while token
-        ln++;
-    } // while line
-    fclose(f);
-/**/
-	printf("\nvalues0:\n");
-	for (int i = 0; i < MAX_VALUES; i++) {
-	  printf("[%d]:%d<>", i, values0[i]);
-    }
-	printf("\n");
-	for (int i = 0; i < MAX_VALUES; i++) {
-	  printf("[%d]:%d<>", i, values1[i]);
-    }
-	printf("\n");
-/**/
-} // read_values
-
-void init_DS1803( void ) 
+void DS1803_init( void ) 
 {
-    ESP_ERROR_CHECK(i2c_master_init());
-    ESP_LOGI(TAG, "I2C DS1803 initialized successfully");
+  ESP_ERROR_CHECK(i2c_master_init());
+  ESP_LOGI(TAG, "I2C DS1803 initialized successfully");
 	DS1803_set( 0, 0);
 	DS1803_set( 1, 0);
-    read_values();
-}
+  read_values(); // config
+} // init_DS1803
+

@@ -164,14 +164,14 @@ static esp_err_t cfg_handler(httpd_req_t *req) {
     offset += snprintf(json_buf + offset, sizeof(json_buf) - offset, 
                        "{\"values\":[");
     
-    for (int i = 0; i < MAX_VALUES; i++) {
+    for (int i = 0; i < MAX_VALUES_CBX; i++) {
         offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
                            "%u%s", Hvalues[i], (i < MAX_VALUES - 1) ? "," : "");
     } // for
     offset += snprintf(json_buf + offset, sizeof(json_buf) - offset, 
                        "],\"display\":[");
     
-    for (int i = 0; i < MAX_VALUES; i++) {
+    for (int i = 0; i < MAX_VALUES_CBX; i++) {
         offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
                            "\"%s\"%s", Hdisplay[i], (i < MAX_VALUES - 1) ? "," : "");
     } // for
@@ -206,11 +206,11 @@ static void ws_async_send(void *arg)
   struct async_resp_arg *resp_arg = arg;
   httpd_handle_t hd = resp_arg->hd;
 
-	uint32_t voltage1 = 1; // adc1_get_raw(ADC_v1);  // int analogVolts = analogReadMilliVolts(2);
-	uint32_t voltage2 = 1; // adc1_get_raw(ADC_v2);
+	uint32_t voltage1 = get_ADC(ADC_v1);
+	uint32_t voltage2 = get_ADC(ADC_v2);
 
-	uint32_t current1 = 5; // adc1_get_raw(ADC_c1);
-	uint32_t current2 = 5; // adc1_get_raw(ADC_c2);
+	uint32_t current1 = get_ADC(ADC_c1);
+	uint32_t current2 = get_ADC(ADC_c2);
 
 	
 	// (0-4095 -> 0-2.5 V)

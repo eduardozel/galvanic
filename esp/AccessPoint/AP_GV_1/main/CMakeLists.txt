@@ -1,4 +1,5 @@
 set(srcs "main.c"
+         "config.c"
          "DS1803.c"
          "webserver.c"
          "GV.c")
